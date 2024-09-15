@@ -1,8 +1,9 @@
 use core::time::Duration;
 
-use vexide::prelude::*;
+use alloc::sync::Arc;
+use vexide::{core::sync::Mutex, prelude::*};
 
-use crate::Robot;
+use crate::{chassis::Chassis, odometry::Pose};
 
 const DIAMETER: f64 = 3.25;
 const GEAR_RATIO: f64 = 1.75;
@@ -10,7 +11,7 @@ const GEAR_RATIO: f64 = 1.75;
 const DISTANCE_PER_DEGREE: f64 = DIAMETER * core::f64::consts::PI / GEAR_RATIO;
 
 pub trait Pid {
-    fn run(&mut self, robot: &mut Robot, target: f64, time_out: u16);
+    async fn run(&mut self, chassis: &mut Chassis, pose: Arc<Mutex<Pose>>, target: f64, time_out: u16);
 }
 
 struct BasePid {
@@ -67,12 +68,12 @@ impl LinearPid {
 }
 
 impl Pid for LinearPid {
-    fn run(&mut self, robot: &mut Robot, target: f64, time_out: u16) {
+    async fn run(&mut self, chassis: &mut Chassis, _pose: Arc<Mutex<Pose>>, target: f64, time_out: u16) {
         self.target = target;
         let mut time = 0;
 
         loop {
-            let error = self.get_error(&robot.chassis.left_motors[0]);
+            let error = self.get_error(&chassis.left_motors[0]);
 
             if error.abs() < 1.0 || time > time_out {
                 break;
@@ -80,13 +81,13 @@ impl Pid for LinearPid {
 
             let power = self.base.get_output(error);
 
-            robot.chassis.set_motors((power, power));
+            chassis.set_motors((power, power));
 
             sleep(Duration::from_millis(10));
             time += 10;
         }
 
-        robot.chassis.set_motors((0.0, 0.0));
+        chassis.set_motors((0.0, 0.0));
     }
 }
 
@@ -103,18 +104,20 @@ impl AngularPid {
         }
     }
 
-    fn get_error(&self, imu_sensor: &InertialSensor) -> f64 {
-        normalize_angle(self.target - normalize_angle(imu_sensor.heading().unwrap()))
+    fn get_error(&self, angle: f64) -> f64 {
+        normalize_angle(self.target - normalize_angle(angle))
     }
 }
 
 impl Pid for AngularPid {
-    fn run(&mut self, robot: &mut Robot, target: f64, time_out: u16) {
+    async fn run(&mut self, chassis: &mut Chassis, pose: Arc<Mutex<Pose>>, target: f64, time_out: u16) {
         self.target = target;
         let mut time = 0;
 
         loop {
-            let error = self.get_error(&robot.imu_sensor);
+            let pose = pose.lock().await;
+            let error = self.get_error(pose.heading);
+            drop(pose);
 
             if error.abs() < 1.0 || time > time_out {
                 break;
@@ -122,11 +125,13 @@ impl Pid for AngularPid {
 
             let power = self.base.get_output(error);
 
-            robot.chassis.set_motors((power, -power));
+            chassis.set_motors((power, -power));
 
             sleep(Duration::from_millis(10));
             time += 10;
         }
+
+        chassis.set_motors((0.0, 0.0));
     }
 }
 

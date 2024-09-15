@@ -5,22 +5,26 @@ use core::{
 
 extern crate alloc;
 
+use crate::vector::Vec2;
+
 use alloc::sync::Arc;
 
 use vexide::{
     core::sync::Mutex,
-    prelude::{sleep, Float, InertialSensor, Position, RotationSensor},
+    prelude::{sleep, Float, InertialSensor, RotationSensor},
 };
 
 pub struct Pose {
-    pub x: f64,
-    pub y: f64,
+    pub position: Vec2,
     pub heading: f64,
 }
 
 impl Pose {
     pub fn new(x: f64, y: f64, heading: f64) -> Self {
-        Self { x, y, heading }
+        Self {
+            position: Vec2::new(x, y),
+            heading,
+        }
     }
 }
 
@@ -29,7 +33,6 @@ const TM: f64 = 0.0;
 
 // const RADIUS: f64 = 2.75;
 
-// reformat this when able to
 fn get_delta_ticks(theta_curr: f64, theta_prev: f64) -> f64 {
     let delta_theta_clockwise;
     let delta_theta_counter_closewise;
@@ -51,9 +54,9 @@ fn get_delta_ticks(theta_curr: f64, theta_prev: f64) -> f64 {
 
 pub async fn step_math(
     robot_pose: Arc<Mutex<Pose>>,
-    x_rotation: Arc<RotationSensor>,
-    y_rotation: Arc<RotationSensor>,
-    imu_sensor: Arc<InertialSensor>,
+    x_rotation: RotationSensor,
+    y_rotation: RotationSensor,
+    imu_sensor: InertialSensor,
 ) {
     let mut prev_mid_val = x_rotation.position().unwrap().as_radians();
     let mut prev_left_val = y_rotation.position().unwrap().as_radians();
@@ -66,7 +69,8 @@ pub async fn step_math(
         let delta_m = get_delta_ticks(prev_mid_val, mid_val);
         let delta_l = get_delta_ticks(prev_left_val, left_val);
 
-        let theta = Position::from_degrees(imu_sensor.heading().unwrap_or_default()).as_radians();
+        let heading = imu_sensor.heading().unwrap_or_default();
+        let theta = heading * TAU / 360.0;
         let delta_theta = theta - prev_theta;
 
         prev_left_val = left_val;
@@ -89,9 +93,8 @@ pub async fn step_math(
         let polar_theta = delta_local_y.atan2(delta_local_x) - avg_theta;
 
         let mut pose = robot_pose.lock().await;
-        pose.x += polar_radius * polar_theta.cos();
-        pose.y += polar_radius * polar_theta.sin();
-        pose.heading = theta;
+        pose.position += Vec2::from_polar(polar_radius, polar_theta);
+        pose.heading = heading;
 
         drop(pose);
 

@@ -6,6 +6,7 @@ extern crate alloc;
 mod chassis;
 mod odometry;
 mod pid;
+mod vector;
 
 use alloc::{sync::Arc, vec};
 use core::time::Duration;
@@ -23,30 +24,20 @@ struct Robot {
     pub color_guard: (AdiDigitalOut, LogicLevel),
     pub clamp: (AdiDigitalOut, LogicLevel),
 
-    pub left_pod: Arc<RotationSensor>,
-    pub right_pod: Arc<RotationSensor>,
-    pub imu_sensor: Arc<InertialSensor>,
-
     pub controller: Controller,
+
+    pub pose: Arc<Mutex<Pose>>,
 }
 
 impl Compete for Robot {
     async fn autonomous(&mut self) {
-        let robot_pose = Arc::new(Mutex::new(Pose::new(0.0, 0.0, 0.0)));
-
-        spawn(odometry::step_math(
-            robot_pose.clone(),
-            self.left_pod.clone(),
-            self.right_pod.clone(),
-            self.imu_sensor.clone(),
-        ))
-        .detach();
-
         let mut linear = LinearPid::new(0.0, 0.0, 0.0, 0.0);
         let mut angular = AngularPid::new(0.0, 0.0, 0.0, 0.0);
 
-        linear.run(self, 10.0, 5000);
-        angular.run(self, 180.0, 5000);
+        // What is this ugly ahh code 😭
+        // Rewrite pid in a better way
+        linear.run(&mut self.chassis, self.pose.clone(), 10.0, 5000).await;
+        angular.run(&mut self.chassis, self.pose.clone(), 180.0, 5000).await;
     }
 
     async fn driver(&mut self) {
@@ -57,9 +48,11 @@ impl Compete for Robot {
             self.intake();
 
             if self.controller.button_a.was_pressed().unwrap_or_default() {
-                self.clamp.0.set_level(!self.clamp.1).unwrap();
+                self.clamp.1 = !self.clamp.1;
+                self.clamp.0.set_level(self.clamp.1).unwrap();
             } else if self.controller.button_b.was_pressed().unwrap_or_default() {
-                self.color_guard.0.set_level(!self.color_guard.1).unwrap();
+                self.color_guard.1 = !self.color_guard.1;
+                self.color_guard.0.set_level(self.color_guard.1).unwrap();
             }
 
             let hue = self.color_sensor.hue().unwrap_or_default();
@@ -113,14 +106,24 @@ async fn main(peripherals: Peripherals) {
     let robot = Robot {
         chassis,
         intake_motor: Motor::new(peripherals.port_7, Gearset::Blue, Direction::Forward),
-        imu_sensor: Arc::new(InertialSensor::new(peripherals.port_8)),
         color_sensor: OpticalSensor::new(peripherals.port_9),
         color_guard: (AdiDigitalOut::new(peripherals.adi_a), LogicLevel::Low),
         clamp: (AdiDigitalOut::new(peripherals.adi_b), LogicLevel::Low),
-        left_pod: Arc::new(RotationSensor::new(peripherals.port_11, Direction::Forward)),
-        right_pod: Arc::new(RotationSensor::new(peripherals.port_12, Direction::Forward)),
         controller: peripherals.primary_controller,
+        pose: Arc::new(Mutex::new(Pose::new(0.0, 0.0, 0.0))),
     };
+
+    let imu_sensor = InertialSensor::new(peripherals.port_8);
+    let left_pod = RotationSensor::new(peripherals.port_11, Direction::Forward);
+    let right_pod = RotationSensor::new(peripherals.port_12, Direction::Forward);
+
+    spawn(odometry::step_math(
+        robot.pose.clone(),
+        left_pod,
+        right_pod,
+        imu_sensor,
+    ))
+    .detach();
 
     robot.compete().await;
 }
