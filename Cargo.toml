@@ -1,0 +1,21 @@
+[package]
+name = "Robot-719E"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+# These fields configure default behavior for uploads with `cargo v5`.
+[package.metadata.v5]
+slot = 2
+name = "719E Vexide"
+icon = "cool-x"
+compress = true
+
+[dependencies]
+# slint = { version = "1.7.0", default-features = false, features = ["compat-1-2", "unsafe-single-threaded", "libm", "renderer-software"] }
+# vexide = { version = "0.3.0", features = ["slint"] }
+vexide = "0.3.0"
+
+[build-dependencies]
+slint-build = "1.7.0"
