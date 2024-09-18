@@ -1,7 +1,5 @@
-extern crate alloc;
-
 use alloc::vec::Vec;
-use core::f64::consts::FRAC_PI_2;
+use core::f32::consts::FRAC_PI_2;
 
 use vexide::prelude::{Controller, Float, Motor};
 
@@ -69,7 +67,6 @@ impl Chassis {
                 power = controller.left_stick.y().unwrap_or_default();
                 turn = controller.right_stick.x().unwrap_or_default();
             }
-
             JoystickType::Tank => {
                 left = controller.left_stick.y().unwrap_or_default();
                 right = controller.right_stick.y().unwrap_or_default();
@@ -107,10 +104,9 @@ impl Chassis {
     const CONTROLLER_DEADZONE: f32 = 0.05;
 
     fn turn_remapping(&self, turn: f32) -> f32 {
-        let pi_2 = FRAC_PI_2 as f32;
-        let denominator = (pi_2 * Self::CD_TURN_NON_LINEARITY).sin();
-        let first_map_iteration = (pi_2 * Self::CD_TURN_NON_LINEARITY * turn).sin();
-        (pi_2 * Self::CD_TURN_NON_LINEARITY * first_map_iteration).sin() / denominator
+        let denominator = (FRAC_PI_2 * Self::CD_TURN_NON_LINEARITY).sin();
+        let first_map_iteration = (FRAC_PI_2 * Self::CD_TURN_NON_LINEARITY * turn).sin();
+        (FRAC_PI_2 * Self::CD_TURN_NON_LINEARITY * first_map_iteration).sin() / denominator
     }
 
     fn update_accumulator(&mut self) {

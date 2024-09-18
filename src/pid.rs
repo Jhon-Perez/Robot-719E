@@ -1,6 +1,6 @@
-use core::time::Duration;
-
 use alloc::sync::Arc;
+use core::{f64::consts::PI, time::Duration};
+
 use vexide::{core::sync::Mutex, prelude::*};
 
 use crate::{chassis::Chassis, odometry::Pose};
@@ -8,10 +8,16 @@ use crate::{chassis::Chassis, odometry::Pose};
 const DIAMETER: f64 = 3.25;
 const GEAR_RATIO: f64 = 1.75;
 
-const DISTANCE_PER_DEGREE: f64 = DIAMETER * core::f64::consts::PI / GEAR_RATIO;
+const DISTANCE_PER_DEGREE: f64 = DIAMETER * PI / GEAR_RATIO;
 
 pub trait Pid {
-    async fn run(&mut self, chassis: &mut Chassis, pose: Arc<Mutex<Pose>>, target: f64, time_out: u16);
+    async fn run(
+        &mut self,
+        chassis: &mut Chassis,
+        pose: Arc<Mutex<Pose>>,
+        target: f64,
+        time_out: u16,
+    );
 }
 
 struct BasePid {
@@ -68,7 +74,13 @@ impl LinearPid {
 }
 
 impl Pid for LinearPid {
-    async fn run(&mut self, chassis: &mut Chassis, _pose: Arc<Mutex<Pose>>, target: f64, time_out: u16) {
+    async fn run(
+        &mut self,
+        chassis: &mut Chassis,
+        _pose: Arc<Mutex<Pose>>,
+        target: f64,
+        time_out: u16,
+    ) {
         self.target = target;
         let mut time = 0;
 
@@ -110,7 +122,13 @@ impl AngularPid {
 }
 
 impl Pid for AngularPid {
-    async fn run(&mut self, chassis: &mut Chassis, pose: Arc<Mutex<Pose>>, target: f64, time_out: u16) {
+    async fn run(
+        &mut self,
+        chassis: &mut Chassis,
+        pose: Arc<Mutex<Pose>>,
+        target: f64,
+        time_out: u16,
+    ) {
         self.target = target;
         let mut time = 0;
 

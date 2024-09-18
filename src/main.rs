@@ -5,6 +5,7 @@ extern crate alloc;
 
 mod chassis;
 mod odometry;
+mod path;
 mod pid;
 mod vector;
 
@@ -34,10 +35,12 @@ impl Compete for Robot {
         let mut linear = LinearPid::new(0.0, 0.0, 0.0, 0.0);
         let mut angular = AngularPid::new(0.0, 0.0, 0.0, 0.0);
 
-        // What is this ugly ahh code 😭
-        // Rewrite pid in a better way
-        linear.run(&mut self.chassis, self.pose.clone(), 10.0, 5000).await;
-        angular.run(&mut self.chassis, self.pose.clone(), 180.0, 5000).await;
+        linear
+            .run(&mut self.chassis, self.pose.clone(), 10.0, 5000)
+            .await;
+        angular
+            .run(&mut self.chassis, self.pose.clone(), 180.0, 5000)
+            .await;
     }
 
     async fn driver(&mut self) {
@@ -113,9 +116,11 @@ async fn main(peripherals: Peripherals) {
         pose: Arc::new(Mutex::new(Pose::new(0.0, 0.0, 0.0))),
     };
 
-    let imu_sensor = InertialSensor::new(peripherals.port_8);
+    let mut imu_sensor = InertialSensor::new(peripherals.port_8);
     let left_pod = RotationSensor::new(peripherals.port_11, Direction::Forward);
     let right_pod = RotationSensor::new(peripherals.port_12, Direction::Forward);
+
+    imu_sensor.calibrate().await.unwrap();
 
     spawn(odometry::step_math(
         robot.pose.clone(),

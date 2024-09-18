@@ -1,18 +1,13 @@
-use core::{
-    f64::consts::TAU,
-    time::Duration,
-};
-
-extern crate alloc;
-
-use crate::vector::Vec2;
-
 use alloc::sync::Arc;
+use core::{f64::consts::TAU, time::Duration};
 
 use vexide::{
     core::sync::Mutex,
+    devices::PortError,
     prelude::{sleep, Float, InertialSensor, RotationSensor},
 };
+
+use crate::vector::Vec2;
 
 pub struct Pose {
     pub position: Vec2,
@@ -57,14 +52,14 @@ pub async fn step_math(
     x_rotation: RotationSensor,
     y_rotation: RotationSensor,
     imu_sensor: InertialSensor,
-) {
-    let mut prev_mid_val = x_rotation.position().unwrap().as_radians();
-    let mut prev_left_val = y_rotation.position().unwrap().as_radians();
+) -> Result<(), PortError> {
+    let mut prev_mid_val = x_rotation.position()?.as_radians();
+    let mut prev_left_val = y_rotation.position()?.as_radians();
     let mut prev_theta = 0.0;
 
     loop {
-        let mid_val = y_rotation.position().unwrap().as_radians();
-        let left_val = x_rotation.position().unwrap().as_radians();
+        let mid_val = y_rotation.position()?.as_radians();
+        let left_val = x_rotation.position()?.as_radians();
 
         let delta_m = get_delta_ticks(prev_mid_val, mid_val);
         let delta_l = get_delta_ticks(prev_left_val, left_val);
@@ -77,13 +72,15 @@ pub async fn step_math(
         prev_mid_val = mid_val;
         prev_theta = theta;
 
-        let (delta_local_x, delta_local_y) = if delta_theta == 0.0 {
-            (delta_m, delta_l)
+        let delta_local_x;
+        let delta_local_y;
+
+        if delta_theta == 0.0 {
+            delta_local_x = delta_m;
+            delta_local_y = delta_l
         } else {
-            (
-                2.0 * (delta_theta / 2.0).sin() * (delta_m / delta_theta + TM),
-                2.0 * (delta_theta / 2.0).sin() * (delta_l / delta_theta + TL),
-            )
+            delta_local_x = 2.0 * (delta_theta / 2.0).sin() * (delta_m / delta_theta + TM);
+            delta_local_y = 2.0 * (delta_theta / 2.0).sin() * (delta_l / delta_theta + TL);
         };
 
         let avg_theta = theta + (delta_theta / 2.0);
