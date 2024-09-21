@@ -1,7 +1,19 @@
-use alloc::vec::Vec;
-use core::f32::consts::FRAC_PI_2;
+use alloc::{sync::Arc, vec::Vec};
+use core::{f32::consts::FRAC_PI_2, f64::consts::PI, time::Duration};
 
-use vexide::prelude::{Controller, Float, Motor};
+use vexide::{
+    core::sync::Mutex,
+    prelude::{sleep, Controller, Float, Motor},
+};
+
+use crate::{
+    odometry::Pose,
+    pid::{Pid, TargetType},
+};
+
+const DIAMETER: f64 = 3.25;
+const GEAR_RATIO: f64 = 1.0;
+const DISTANCE_PER_REVOLUTION: f64 = DIAMETER * PI * GEAR_RATIO;
 
 #[allow(dead_code)]
 #[derive(PartialEq)]
@@ -15,6 +27,12 @@ pub enum JoystickType {
 pub struct Chassis {
     pub left_motors: Vec<Motor>,
     pub right_motors: Vec<Motor>,
+
+    // pid controller
+    pub linear: Pid,
+    pub angular: Pid,
+    pub drive: TargetType,
+    pub turn: TargetType,
 
     joystick_type: JoystickType,
     is_cheesy: bool,
@@ -31,11 +49,17 @@ impl Chassis {
         left_motors: Vec<Motor>,
         right_motors: Vec<Motor>,
         joystick_type: JoystickType,
+        linear: Pid,
+        angular: Pid,
     ) -> Self {
         Self {
             left_motors,
             right_motors,
             joystick_type,
+            linear,
+            angular,
+            drive: TargetType::None,
+            turn: TargetType::None,
             is_cheesy: false,
             quick_stop_accumulator: 0.0,
             negative_inertia_accumulator: 0.0,
@@ -84,6 +108,66 @@ impl Chassis {
             left as f64 * Motor::MAX_VOLTAGE,
             right as f64 * Motor::MAX_VOLTAGE,
         )
+    }
+
+    pub async fn run(&mut self, pose: Arc<Mutex<Pose>>) {
+        let mut time = 0u32;
+
+        // TEST: This might fail if the robot does not move in the direction of the
+        // target as the required angle the robot needs to face will change.
+        // POSSIBLE FIX: Make the robot face the target (or near) before moving
+        // to prevent from overshooting the target. Or calculate using atan2 every
+        // iteration.
+        if let TargetType::Coordinate(target) = self.turn {
+            let pose = pose.lock().await;
+            let angle = (target.y - pose.position.y).atan2(target.x - pose.position.x);
+            self.turn = TargetType::Distance(angle);
+        }
+
+        loop {
+            let drive_error = match self.drive {
+                TargetType::Coordinate(target) => {
+                    let pose = pose.lock().await;
+                    target.euclidean_distance(&pose.position)
+                }
+                TargetType::Distance(target) => {
+                    target
+                        - self.left_motors[0].position().unwrap().as_revolutions()
+                            * DISTANCE_PER_REVOLUTION
+                }
+                TargetType::None => 0.0,
+            };
+
+            let turn_error = match self.turn {
+                // might have to change back to reachable
+                TargetType::Coordinate(_) => unreachable!(),
+                TargetType::Distance(target) => {
+                    let pose = pose.lock().await;
+                    target - pose.heading
+                }
+                TargetType::None => 0.0,
+            };
+
+            if (drive_error.abs() < 0.5 && turn_error.abs() < 0.5) || time > 5000 {
+                break;
+            }
+
+            let drive_output = self.linear.output(drive_error);
+            let turn_output = self.angular.output(turn_error);
+
+            self.set_motors((drive_output + turn_output, drive_output - turn_output));
+
+            sleep(Duration::from_millis(10)).await;
+            time += 10;
+        }
+    }
+
+    pub fn set_drive_target(&mut self, target: TargetType) {
+        self.drive = target;
+    }
+
+    pub fn set_turn_target(&mut self, target: TargetType) {
+        self.turn = target;
     }
 
     // Implement error handling

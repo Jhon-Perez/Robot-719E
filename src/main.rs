@@ -14,7 +14,7 @@ use core::time::Duration;
 
 use chassis::Chassis;
 use odometry::Pose;
-use pid::{AngularPid, LinearPid, Pid};
+use pid::{Pid, TargetType};
 use vexide::{core::sync::Mutex, devices::adi::digital::LogicLevel, prelude::*};
 
 struct Robot {
@@ -32,15 +32,11 @@ struct Robot {
 
 impl Compete for Robot {
     async fn autonomous(&mut self) {
-        let mut linear = LinearPid::new(0.0, 0.0, 0.0, 0.0);
-        let mut angular = AngularPid::new(0.0, 0.0, 0.0, 0.0);
+        let somewhere = vector::Vec2::new(10.0, 10.0);
+        self.chassis.set_drive_target(TargetType::Coordinate(somewhere));
+        self.chassis.set_turn_target(TargetType::Distance(100.0));
 
-        linear
-            .run(&mut self.chassis, self.pose.clone(), 10.0, 5000)
-            .await;
-        angular
-            .run(&mut self.chassis, self.pose.clone(), 180.0, 5000)
-            .await;
+        self.chassis.run(self.pose.clone()).await;
     }
 
     async fn driver(&mut self) {
@@ -103,6 +99,8 @@ async fn main(peripherals: Peripherals) {
         left_motors,
         right_motors,
         chassis::JoystickType::SplitArcade,
+        Pid::new(0.0, 0.0, 0.0, 0.0),
+        Pid::new(0.0, 0.0, 0.0, 0.0),
     );
     chassis.set_joystick_type(chassis::JoystickType::SplitArcade);
 

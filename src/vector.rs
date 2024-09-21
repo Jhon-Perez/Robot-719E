@@ -28,6 +28,10 @@ impl Vec2 {
         (self.x * self.x + self.y * self.y).sqrt()
     }
 
+    pub fn euclidean_distance(&self, other: &Self) -> f64 {
+        ((self.x - other.x).powi(2) + (self.y - other.y).powi(2)).sqrt()
+    }
+
     pub fn dot(&self, other: &Self) -> f64 {
         self.x * other.x + self.y * other.y
     }
