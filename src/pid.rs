@@ -1,13 +1,5 @@
 use vexide::prelude::Float;
 
-use crate::vector::Vec2;
-
-pub enum TargetType {
-    Coordinate(Vec2),
-    Distance(f64),
-    None,
-}
-
 pub struct Pid {
     k_p: f64,
     k_i: f64,

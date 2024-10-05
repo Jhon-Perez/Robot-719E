@@ -1,5 +1,5 @@
-use alloc::{sync::Arc, vec::Vec};
-use core::{f32::consts::FRAC_PI_2, f64::consts::PI, time::Duration};
+use alloc::{boxed::Box, sync::Arc};
+use core::{f64::consts::{FRAC_PI_2, PI}, time::Duration};
 
 use vexide::{
     core::sync::Mutex,
@@ -8,11 +8,11 @@ use vexide::{
 
 use crate::{
     odometry::Pose,
-    pid::{Pid, TargetType},
+    pid::Pid, vector::Vec2,
 };
 
 const DIAMETER: f64 = 3.25;
-const GEAR_RATIO: f64 = 1.0;
+const GEAR_RATIO: f64 = 0.8;
 const DISTANCE_PER_REVOLUTION: f64 = DIAMETER * PI * GEAR_RATIO;
 
 #[allow(dead_code)]
@@ -24,30 +24,36 @@ pub enum JoystickType {
     Tank,
 }
 
+pub enum TargetType {
+    Coordinate(Vec2),
+    Distance(f64),
+    None,
+}
+
 pub struct Chassis {
-    pub left_motors: Vec<Motor>,
-    pub right_motors: Vec<Motor>,
+    left_motors: Box<[Motor]>,
+    right_motors: Box<[Motor]>,
 
     // pid controller
-    pub linear: Pid,
-    pub angular: Pid,
-    pub drive: TargetType,
-    pub turn: TargetType,
+    linear: Pid,
+    angular: Pid,
+    drive: TargetType,
+    turn: TargetType,
 
     joystick_type: JoystickType,
     is_cheesy: bool,
 
     // Cheesy drive implementation, maybe move to its own struct
-    quick_stop_accumulator: f32,
-    negative_inertia_accumulator: f32,
-    prev_turn: f32,
-    prev_power: f32,
+    quick_stop_accumulator: f64,
+    negative_inertia_accumulator: f64,
+    prev_turn: f64,
+    prev_power: f64,
 }
 
 impl Chassis {
     pub fn new(
-        left_motors: Vec<Motor>,
-        right_motors: Vec<Motor>,
+        left_motors: Box<[Motor]>,
+        right_motors: Box<[Motor]>,
         joystick_type: JoystickType,
         linear: Pid,
         angular: Pid,
@@ -66,10 +72,6 @@ impl Chassis {
             prev_turn: 0.0,
             prev_power: 0.0,
         }
-    }
-
-    pub fn set_joystick_type(&mut self, joystick_type: JoystickType) {
-        self.joystick_type = joystick_type;
     }
 
     pub fn differential_drive(&mut self, controller: &Controller) -> (f64, f64) {
@@ -105,13 +107,13 @@ impl Chassis {
         }
 
         (
-            left as f64 * Motor::MAX_VOLTAGE,
-            right as f64 * Motor::MAX_VOLTAGE,
+            left * Motor::MAX_VOLTAGE,
+            right * Motor::MAX_VOLTAGE,
         )
     }
 
     pub async fn run(&mut self, pose: Arc<Mutex<Pose>>) {
-        let mut time = 0u32;
+        let mut time = 0u16;
 
         // TEST: This might fail if the robot does not move in the direction of the
         // target as the required angle the robot needs to face will change.
@@ -170,24 +172,23 @@ impl Chassis {
         self.turn = target;
     }
 
-    // Implement error handling
     pub fn set_motors(&mut self, power: (f64, f64)) {
         for motor in self.left_motors.iter_mut() {
-            motor.set_voltage(power.0).unwrap();
+            motor.set_voltage(power.0).ok();
         }
         for motor in self.right_motors.iter_mut() {
-            motor.set_voltage(power.1).unwrap();
+            motor.set_voltage(power.1).ok();
         }
     }
 
     // Cheesy drive implementation
-    const CD_TURN_NON_LINEARITY: f32 = 0.5;
-    const CD_NEGATIVE_INERTIA_SCLAR: f32 = 4.0;
-    const CD_SENSITIVITY: f32 = 1.0;
-    const DRIVER_SLEW: f32 = 0.1;
-    const CONTROLLER_DEADZONE: f32 = 0.05;
+    const CD_TURN_NON_LINEARITY: f64 = 0.5;
+    const CD_NEGATIVE_INERTIA_SCLAR: f64 = 4.0;
+    const CD_SENSITIVITY: f64 = 1.0;
+    const DRIVER_SLEW: f64 = 0.1;
+    const CONTROLLER_DEADZONE: f64 = 0.05;
 
-    fn turn_remapping(&self, turn: f32) -> f32 {
+    fn turn_remapping(&self, turn: f64) -> f64 {
         let denominator = (FRAC_PI_2 * Self::CD_TURN_NON_LINEARITY).sin();
         let first_map_iteration = (FRAC_PI_2 * Self::CD_TURN_NON_LINEARITY * turn).sin();
         (FRAC_PI_2 * Self::CD_TURN_NON_LINEARITY * first_map_iteration).sin() / denominator
@@ -211,7 +212,7 @@ impl Chassis {
         }
     }
 
-    fn cheesy_drive(&mut self, power: f32, turn: f32) -> (f32, f32) {
+    fn cheesy_drive(&mut self, power: f64, turn: f64) -> (f64, f64) {
         let mut turn_in_place = false;
 
         let linear =
@@ -245,7 +246,7 @@ impl Chassis {
     }
 }
 
-fn get_acceleration(power: f32, acceleration: i32) -> f32 {
+fn get_acceleration(power: f64, acceleration: i32) -> f64 {
     if acceleration == 1 {
         return power;
     }

@@ -5,22 +5,20 @@ extern crate alloc;
 
 mod chassis;
 mod odometry;
-mod path;
 mod pid;
 mod vector;
 
-use alloc::{sync::Arc, vec};
-use core::time::Duration;
+use alloc::{boxed::Box, sync::Arc};
 
-use chassis::Chassis;
+use chassis::{Chassis, TargetType};
 use odometry::Pose;
-use pid::{Pid, TargetType};
-use vexide::{core::sync::Mutex, devices::adi::digital::LogicLevel, prelude::*};
+use pid::Pid;
+use vexide::{core::sync::Mutex, devices::adi::digital::LogicLevel, prelude::*, startup::banner::themes::THEME_MURICA};
 
 struct Robot {
     pub chassis: chassis::Chassis,
 
-    pub intake_motor: Motor,
+    pub intake: Motor,
     pub color_sensor: OpticalSensor,
     pub color_guard: (AdiDigitalOut, LogicLevel),
     pub clamp: (AdiDigitalOut, LogicLevel),
@@ -44,69 +42,56 @@ impl Compete for Robot {
             let power = self.chassis.differential_drive(&self.controller);
             self.chassis.set_motors(power);
 
-            self.intake();
-
-            if self.controller.button_a.was_pressed().unwrap_or_default() {
-                self.clamp.1 = !self.clamp.1;
-                self.clamp.0.set_level(self.clamp.1).unwrap();
-            } else if self.controller.button_b.was_pressed().unwrap_or_default() {
-                self.color_guard.1 = !self.color_guard.1;
-                self.color_guard.0.set_level(self.color_guard.1).unwrap();
+            if self.controller.right_trigger_1.is_pressed().unwrap_or_default() {
+                self.intake.set_voltage(Motor::MAX_VOLTAGE).ok();
+            } else if self.controller.left_trigger_1.is_pressed().unwrap_or_default() {
+                self.intake.set_voltage(-Motor::MAX_VOLTAGE).ok();
+            } else {
+                self.intake.brake(BrakeMode::Coast).ok();
             }
+            
+            // if self.controller.button_a.was_pressed().unwrap_or_default() {
+            //     self.clamp.1 = !self.clamp.1;
+            //     self.clamp.0.set_level(self.clamp.1).unwrap();
+            // } 
+            
+            // if self.controller.button_b.was_pressed().unwrap_or_default() {
+            //     self.color_guard.1 = !self.color_guard.1;
+            //     self.color_guard.0.set_level(self.color_guard.1).unwrap();
+            // }
 
-            let hue = self.color_sensor.hue().unwrap_or_default();
-            println!("{}", hue);
+            // let hue = self.color_sensor.hue().unwrap_or_default();
+            // println!("{}", hue);
 
-            sleep(Duration::from_millis(10)).await;
+            sleep(Controller::UPDATE_INTERVAL).await;
         }
     }
 }
 
-impl Robot {
-    pub fn intake(&mut self) {
-        if self
-            .controller
-            .right_trigger_1
-            .is_pressed()
-            .unwrap_or_default()
-        {
-            self.intake_motor.set_voltage(12.0).unwrap();
-        } else if self
-            .controller
-            .left_trigger_1
-            .is_pressed()
-            .unwrap_or_default()
-        {
-            self.intake_motor.set_voltage(-12.0).unwrap();
-        }
-    }
-}
-
-#[vexide::main]
+#[vexide::main(banner(theme = THEME_MURICA))]
 async fn main(peripherals: Peripherals) {
-    let left_motors = vec![
-        Motor::new(peripherals.port_1, Gearset::Green, Direction::Forward),
-        Motor::new(peripherals.port_2, Gearset::Green, Direction::Forward),
-        Motor::new(peripherals.port_3, Gearset::Green, Direction::Forward),
-    ];
-    let right_motors = vec![
-        Motor::new(peripherals.port_4, Gearset::Green, Direction::Reverse),
-        Motor::new(peripherals.port_5, Gearset::Green, Direction::Reverse),
-        Motor::new(peripherals.port_6, Gearset::Green, Direction::Reverse),
-    ];
+    let left_motors = Box::new([
+        Motor::new(peripherals.port_20, Gearset::Green, Direction::Forward),
+        Motor::new(peripherals.port_19, Gearset::Green, Direction::Forward),
+        Motor::new(peripherals.port_10, Gearset::Green, Direction::Forward),
+    ]);
+    let right_motors = Box::new([
+        Motor::new(peripherals.port_11, Gearset::Green, Direction::Reverse),
+        Motor::new(peripherals.port_2, Gearset::Green, Direction::Reverse),
+        Motor::new(peripherals.port_1, Gearset::Green, Direction::Reverse),
+    ]);
 
-    let mut chassis = Chassis::new(
+    let chassis = Chassis::new(
         left_motors,
         right_motors,
         chassis::JoystickType::SplitArcade,
         Pid::new(0.0, 0.0, 0.0, 0.0),
         Pid::new(0.0, 0.0, 0.0, 0.0),
     );
-    chassis.set_joystick_type(chassis::JoystickType::SplitArcade);
 
     let robot = Robot {
         chassis,
-        intake_motor: Motor::new(peripherals.port_7, Gearset::Blue, Direction::Forward),
+        intake: Motor::new(peripherals.port_7, Gearset::Blue, Direction::Forward),
         color_sensor: OpticalSensor::new(peripherals.port_9),
         color_guard: (AdiDigitalOut::new(peripherals.adi_a), LogicLevel::Low),
         clamp: (AdiDigitalOut::new(peripherals.adi_b), LogicLevel::Low),
@@ -115,7 +100,7 @@ async fn main(peripherals: Peripherals) {
     };
 
     let mut imu_sensor = InertialSensor::new(peripherals.port_8);
-    let left_pod = RotationSensor::new(peripherals.port_11, Direction::Forward);
+    let left_pod = RotationSensor::new(peripherals.port_13, Direction::Forward);
     let right_pod = RotationSensor::new(peripherals.port_12, Direction::Forward);
 
     imu_sensor.calibrate().await.unwrap();

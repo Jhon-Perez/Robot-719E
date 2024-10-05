@@ -15,7 +15,7 @@ compress = true
 [dependencies]
 # slint = { version = "1.7.0", default-features = false, features = ["compat-1-2", "unsafe-single-threaded", "libm", "renderer-software"] }
 # vexide = { version = "0.3.0", features = ["slint"] }
-vexide = "0.3.0"
+vexide = "0.4.0"
 
 [build-dependencies]
-slint-build = "1.7.0"
+slint-build = "1.8.0"
