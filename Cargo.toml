@@ -8,14 +8,14 @@ edition = "2021"
 # These fields configure default behavior for uploads with `cargo v5`.
 [package.metadata.v5]
 slot = 2
-name = "719E Vexide"
+name = "719E Limbo"
 icon = "cool-x"
 compress = true
 
 [dependencies]
 # slint = { version = "1.7.0", default-features = false, features = ["compat-1-2", "unsafe-single-threaded", "libm", "renderer-software"] }
-# vexide = { version = "0.3.0", features = ["slint"] }
-vexide = "0.4.0"
+# vexide = { version = "0.4.1", features = ["slint"] }
+vexide = "0.4.2"
 
 [build-dependencies]
 slint-build = "1.8.0"
