@@ -1,15 +1,15 @@
 use alloc::{boxed::Box, sync::Arc};
-use core::{f64::consts::{FRAC_PI_2, PI}, time::Duration};
+use core::{
+    f64::consts::{FRAC_PI_2, PI},
+    time::Duration,
+};
 
 use vexide::{
     core::sync::Mutex,
-    prelude::{sleep, Controller, Float, Motor},
+    prelude::{sleep, BrakeMode, Controller, Float, Motor},
 };
 
-use crate::{
-    odometry::Pose,
-    pid::Pid, vector::Vec2,
-};
+use crate::{odometry::Pose, pid::Pid, vector::Vec2};
 
 const DIAMETER: f64 = 3.25;
 const GEAR_RATIO: f64 = 0.8;
@@ -106,25 +106,11 @@ impl Chassis {
             right = get_acceleration(power - turn, 1);
         }
 
-        (
-            left * Motor::MAX_VOLTAGE,
-            right * Motor::MAX_VOLTAGE,
-        )
+        (left * Motor::MAX_VOLTAGE, right * Motor::MAX_VOLTAGE)
     }
 
     pub async fn run(&mut self, pose: Arc<Mutex<Pose>>) {
         let mut time = 0u16;
-
-        // TEST: This might fail if the robot does not move in the direction of the
-        // target as the required angle the robot needs to face will change.
-        // POSSIBLE FIX: Make the robot face the target (or near) before moving
-        // to prevent from overshooting the target. Or calculate using atan2 every
-        // iteration.
-        if let TargetType::Coordinate(target) = self.turn {
-            let pose = pose.lock().await;
-            let angle = (target.y - pose.position.y).atan2(target.x - pose.position.x);
-            self.turn = TargetType::Distance(angle);
-        }
 
         loop {
             let drive_error = match self.drive {
@@ -141,8 +127,10 @@ impl Chassis {
             };
 
             let turn_error = match self.turn {
-                // might have to change back to reachable
-                TargetType::Coordinate(_) => unreachable!(),
+                TargetType::Coordinate(target) => {
+                    let pose = pose.lock().await;
+                    (target.y - pose.position.y).atan2(target.x - pose.position.x)
+                },
                 TargetType::Distance(target) => {
                     let pose = pose.lock().await;
                     target - pose.heading
@@ -157,11 +145,16 @@ impl Chassis {
             let drive_output = self.linear.output(drive_error);
             let turn_output = self.angular.output(turn_error);
 
-            self.set_motors((drive_output + turn_output, drive_output - turn_output));
+            self.set_voltage((
+                (drive_output + turn_output) * Motor::MAX_VOLTAGE,
+                (drive_output - turn_output) * Motor::MAX_VOLTAGE,
+            ));
 
-            sleep(Duration::from_millis(10)).await;
             time += 10;
+            sleep(Duration::from_millis(10)).await;
         }
+
+        self.brake(BrakeMode::Coast);
     }
 
     pub fn set_drive_target(&mut self, target: TargetType) {
@@ -172,12 +165,21 @@ impl Chassis {
         self.turn = target;
     }
 
-    pub fn set_motors(&mut self, power: (f64, f64)) {
+    pub fn set_voltage(&mut self, power: (f64, f64)) {
         for motor in self.left_motors.iter_mut() {
             motor.set_voltage(power.0).ok();
         }
         for motor in self.right_motors.iter_mut() {
             motor.set_voltage(power.1).ok();
+        }
+    }
+
+    pub fn brake(&mut self, mode: BrakeMode) {
+        for motor in self.left_motors.iter_mut() {
+            motor.brake(mode).ok();
+        }
+        for motor in self.right_motors.iter_mut() {
+            motor.brake(mode).ok();
         }
     }
 
