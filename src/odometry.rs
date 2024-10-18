@@ -1,10 +1,10 @@
 use alloc::sync::Arc;
-use core::{f64::consts::TAU, time::Duration};
+use core::time::Duration;
 
 use vexide::{
-    core::sync::Mutex,
-    devices::PortError,
-    prelude::{sleep, Float, InertialSensor, RotationSensor},
+    core::{println, sync::Mutex},
+    devices::{smart::imu::InertialError, PortError},
+    prelude::{sleep, spawn, Float, InertialSensor, RotationSensor},
 };
 
 use crate::vector::Vec2;
@@ -26,51 +26,82 @@ impl Pose {
 const TL: f64 = 0.0;
 const TM: f64 = 0.0;
 
-// const RADIUS: f64 = 2.75;
+const RADIUS: f64 = 2.75;
 
-fn get_delta_ticks(theta_curr: f64, theta_prev: f64) -> f64 {
-    let delta_theta_clockwise;
-    let delta_theta_counter_closewise;
+enum SensorError {
+    PortError(PortError),
+    InertialSensor(InertialError),
+}
 
-    if theta_curr < theta_prev {
-        delta_theta_clockwise = TAU - theta_prev + theta_curr;
-        delta_theta_counter_closewise = -(theta_prev - theta_curr);
-    } else {
-        delta_theta_clockwise = theta_curr - theta_prev;
-        delta_theta_counter_closewise = -(TAU - theta_curr + theta_curr);
-    }
-
-    if delta_theta_clockwise < delta_theta_counter_closewise.abs() {
-        delta_theta_clockwise
-    } else {
-        delta_theta_counter_closewise
+impl From<PortError> for SensorError {
+    fn from(e: PortError) -> Self {
+        Self::PortError(e)
     }
 }
 
-pub async fn step_math(
+impl From<InertialError> for SensorError {
+    fn from(e: InertialError) -> Self {
+        Self::InertialSensor(e)
+    }
+}
+
+pub struct Odometry {
     robot_pose: Arc<Mutex<Pose>>,
     x_rotation: RotationSensor,
     y_rotation: RotationSensor,
     imu_sensor: InertialSensor,
-) -> Result<(), PortError> {
-    let mut prev_mid_val = x_rotation.position()?.as_radians();
-    let mut prev_left_val = y_rotation.position()?.as_radians();
-    let mut prev_theta = 0.0;
 
-    loop {
-        let mid_val = y_rotation.position()?.as_radians();
-        let left_val = x_rotation.position()?.as_radians();
+    prev_mid_val: f64,
+    prev_left_val: f64,
+    prev_theta: f64,
+}
 
-        let delta_m = get_delta_ticks(prev_mid_val, mid_val);
-        let delta_l = get_delta_ticks(prev_left_val, left_val);
+impl Odometry {
+    pub fn new(
+        robot_pose: Arc<Mutex<Pose>>,
+        x_rotation: RotationSensor,
+        y_rotation: RotationSensor,
+        imu_sensor: InertialSensor,
+    ) -> Self {
+        Self {
+            robot_pose,
+            x_rotation,
+            y_rotation,
+            imu_sensor,
 
-        let heading = imu_sensor.heading().unwrap_or_default();
-        let theta = heading * TAU / 360.0;
-        let delta_theta = theta - prev_theta;
+            prev_mid_val: 0.0,
+            prev_left_val: 0.0,
+            prev_theta: 0.0,
+        }
+    }
 
-        prev_left_val = left_val;
-        prev_mid_val = mid_val;
-        prev_theta = theta;
+    async fn step(&mut self) -> Result<(), SensorError> {
+        let mid_val = self.y_rotation.position()?.as_radians();
+        let left_val = self.x_rotation.position()?.as_radians();
+
+        let delta_m = (mid_val - self.prev_mid_val) * RADIUS;
+        let delta_l = (left_val - self.prev_left_val) * RADIUS;
+        let heading = self.imu_sensor.heading()?;
+
+        self.prev_mid_val = mid_val;
+        self.prev_left_val = left_val;
+
+        let offset = self.step_math(delta_m, delta_l, heading.to_radians());
+
+        let mut pose = self.robot_pose.lock().await;
+        pose.position += offset;
+        pose.heading = heading;
+
+        println!("(x, y) = {:?}", pose.position);
+        println!("ang = {}", pose.heading);
+
+        drop(pose);
+
+        Ok(())
+    }
+
+    fn step_math(&mut self, delta_m: f64, delta_l: f64, theta: f64) -> Vec2 {
+        let delta_theta = theta - self.prev_theta;
 
         let delta_local_x;
         let delta_local_y;
@@ -86,15 +117,29 @@ pub async fn step_math(
         let avg_theta = theta + (delta_theta / 2.0);
 
         let polar_radius = (delta_local_x.powi(2) + delta_local_y.powi(2)).sqrt();
-        // let polar_theta = (delta_local_y / delta_local_x).atan() - avg_theta;
         let polar_theta = delta_local_y.atan2(delta_local_x) - avg_theta;
 
-        let mut pose = robot_pose.lock().await;
-        pose.position += Vec2::from_polar(polar_radius, polar_theta);
-        pose.heading = heading;
-
-        drop(pose);
-
-        sleep(Duration::from_millis(10)).await;
+        Vec2::from_polar(polar_radius, polar_theta)
     }
+}
+
+pub fn start(mut odom: Odometry) {
+    spawn(async move {
+        loop {
+            if let Err(e) = odom.step().await {
+                match e {
+                    SensorError::PortError(e) => {
+                        println!("Port error: {:?}", e);
+                    }
+                    SensorError::InertialSensor(e) => {
+                        println!("Inertial sensor error: {:?}", e);
+                    }
+                }
+                return;
+            }
+
+            sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .detach();
 }
