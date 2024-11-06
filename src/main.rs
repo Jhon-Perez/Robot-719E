@@ -4,35 +4,35 @@
 extern crate alloc;
 
 mod chassis;
+mod mappings;
 mod odometry;
 mod pid;
 mod vector;
 
 use alloc::{boxed::Box, sync::Arc};
 use chassis::{Chassis, TargetType};
+use mappings::{ControllerMappings, DriveMode};
 use odometry::{start, Odometry, Pose};
 use pid::Pid;
 use vexide::{
     core::{sync::Mutex, time::Instant}, prelude::*,
+    prelude::InertialSensor,
     startup::banner::themes::THEME_MURICA,
 };
 
 // slint::include_modules!();
 
-// 4x 25 by c-channels, flick 10, flick pt 2 8, bracing 25, 4 bar lift n 2x 20
-
 struct Robot {
-    pub chassis: chassis::Chassis,
+    chassis: chassis::Chassis,
 
-    pub intake: Motor,
-    pub flick: Motor,
-    pub lift: Motor,
+    intake: Motor,
+    flick: Motor,
+    lift: Motor,
 
-    pub color_sensor: OpticalSensor,
-    pub color_guard: AdiSolenoid,
     pub clamp: AdiSolenoid,
+    pub doinker: AdiSolenoid,
 
-    pub controller: Controller,
+    controller: Controller,
 
     pub pose: Arc<Mutex<Pose>>,
 }
@@ -46,81 +46,135 @@ impl Compete for Robot {
             .set_drive_target(TargetType::Coordinate(somewhere));
         self.chassis.set_turn_target(TargetType::Distance(100.0));
 
-        self.chassis.run(self.pose.clone()).await;
+        self.chassis.run().await;
     }
 
     async fn driver(&mut self) {
         println!("Driver control started.");
 
-        const FLICK_MAX_ANGLE: f64 = 180.0;
-        const FLICK_TOLERANCE: f64 = 10.0;
-        let mut turn = false;
-        let mut halfway_mark = false;
+        const FLICK_MAX_ANGLE: f64 = 135.0;
+        const INTAKE_ANGLE: f64 = 30.0;
+        const FLICK_TOLERANCE: f64 = 100.0;
+        const FLICK_GEAR_RATIO: f64 = 36.0 / 60.0;
+        let mut flick_stage = (0..4).cycle();
+        // let mut flick_scored = false;
+        // let mut turn = false;
+        let mut stage = 0;
+
+        let mappings = ControllerMappings {
+            drive_mode: DriveMode::SplitArcade {
+                power: &self.controller.left_stick,
+                turn: &self.controller.right_stick,
+            },
+            intake: &self.controller.right_trigger_1,
+            outake: &self.controller.right_trigger_2,
+            lift_up: &self.controller.button_up,
+            lift_down: &self.controller.button_down,
+            flick: &mut self.controller.button_b,
+            clamp: &mut self.controller.button_y,
+            doinker: &mut self.controller.button_right,
+        };
 
         loop {
             let start_time = Instant::now();
 
-            let power = self.chassis.differential_drive(&self.controller);
+            let power = self.chassis.differential_drive(&mappings);
             self.chassis.set_voltage(power);
 
-            if self.controller.right_trigger_1.is_pressed().unwrap_or_default() {
+            if mappings.intake.is_pressed().unwrap_or_default() {
                 self.intake.set_voltage(Motor::MAX_VOLTAGE).ok();
-            } else if self.controller.left_trigger_1.is_pressed().unwrap_or_default() {
+            } else if mappings.outake.is_pressed().unwrap_or_default() {
                 self.intake.set_voltage(-Motor::MAX_VOLTAGE).ok();
             } else {
                 self.intake.brake(BrakeMode::Coast).ok();
             }
 
-            if self.controller.button_up.is_pressed().unwrap_or_default() {
+            if mappings.lift_up.is_pressed().unwrap_or_default() {
                 self.lift.set_voltage(Motor::MAX_VOLTAGE).ok();
-            } else if self.controller.button_down.is_pressed().unwrap_or_default() {
+            } else if mappings.lift_down.is_pressed().unwrap_or_default() {
                 self.lift.set_voltage(-Motor::MAX_VOLTAGE).ok();
             } else {
                 self.lift.brake(BrakeMode::Coast).ok();
             }
 
-            if self.controller.button_x.is_pressed().unwrap_or_default() {
-                turn = true;
-            }
+            // if self.controller.button_up.is_pressed().unwrap_or_default() {
+            //     self.chassis.set_drive_target(TargetType::None);
+            //     self.chassis.set_turn_target(TargetType::Distance(180.0));
+            //     self.chassis.run().await;
+            // } else if self.controller.button_down.is_pressed().unwrap_or_default() {
+            //     self.chassis.set_drive_target(TargetType::None);
+            //     self.chassis.set_turn_target(TargetType::None);
+            //     self.chassis.run().await;
+            // }
 
-            if turn {
-                if let Ok(angle) = self.flick.position() {
-                    if halfway_mark {
-                        if angle.as_degrees() < FLICK_MAX_ANGLE {
-                            self.flick.set_voltage(Motor::MAX_VOLTAGE).ok();
+            // if mappings.flick.is_pressed().unwrap_or_default() {
+            //     turn = true;
+            // }
+
+            // if turn {
+            //     if let Ok(angle) = self.flick.position() {
+            //         println!("t raw angle: {}", angle.as_degrees());
+            //         let angle = angle.as_degrees();
+            //         println!("angle: {}", angle);
+            //         if !flick_scored {
+            //             if angle < FLICK_MAX_ANGLE {
+            //                 self.flick.set_voltage(10.0).ok();
+            //             } else {
+            //                 flick_scored = true;
+            //             }
+            //         } else if angle > FLICK_TOLERANCE {
+            //             self.flick.set_voltage(-10.0).ok();
+            //         } else {
+            //             self.flick.brake(BrakeMode::Coast).ok();
+            //             flick_scored = false;
+            //             turn = false;
+            //         }
+            //     }
+            // }
+
+            if let Ok(angle) = self.flick.position() {
+                if mappings.flick.was_pressed().unwrap_or_default() {
+                    stage = flick_stage.next().unwrap();
+                }
+                let angle = angle.as_degrees() * FLICK_GEAR_RATIO;
+                match stage {
+                    1 => {
+                        if angle < INTAKE_ANGLE {
+                            self.flick.set_voltage(8.0).ok();
                         } else {
-                            halfway_mark = false;
+                            self.flick.brake(BrakeMode::Hold).ok();
                         }
-                    } else if angle.as_degrees() > FLICK_TOLERANCE {
-                        self.flick.set_voltage(Motor::MAX_VOLTAGE).ok();
-                    } else {
-                        halfway_mark = true;
-                        turn = false;
                     }
+                    2 => {
+                        if angle < FLICK_MAX_ANGLE {
+                            self.flick.set_voltage(8.0).ok();
+                        } else {
+                            self.flick.brake(BrakeMode::Hold).ok();
+                        }
+                    }
+                    3 => {
+                        if angle > FLICK_TOLERANCE {
+                            self.flick.set_voltage(-8.0).ok();
+                        } else {
+                            self.flick.brake(BrakeMode::Coast).ok();
+                            flick_stage.next();
+                        }
+                    }
+                    _ => ()
                 }
             }
 
-            if self.controller.button_a.was_pressed().unwrap_or_default() {
+            if mappings.clamp.was_pressed().unwrap_or_default() {
                 self.clamp.toggle().ok();
             }
 
-            if self.controller.button_b.was_pressed().unwrap_or_default() {
-                self.color_guard.toggle().ok();
+            if mappings.doinker.was_pressed().unwrap_or_default() {
+                self.doinker.toggle().ok();
             }
-            
-            // let hue = self.color_sensor.hue().unwrap();
-            // let rgb = self.color_sensor.rgb().unwrap();
-            // let raw_rgb = self.color_sensor.raw().unwrap();
-            // let proximity = self.color_sensor.proximity().unwrap();
-            // let brightness = self.color_sensor.led_brightness().unwrap();
-            // println!("{}", hue);
-            // println!("{:?}", rgb);
-            // println!("{:?}", raw_rgb);
-            // println!("{}", proximity);
-            // println!("{}", brightness);
-            // println!();
 
             sleep_until(start_time + Controller::UPDATE_INTERVAL).await;
+            // println!("{:?}", start_time);
+            // sleep(Controller::UPDATE_INTERVAL).await;
         }
     }
 }
@@ -144,32 +198,43 @@ async fn main(peripherals: Peripherals) {
     // ui.run().unwrap();
 
     let left_motors = Box::new([
-        Motor::new(peripherals.port_20, Gearset::Green, Direction::Forward),
-        Motor::new(peripherals.port_19, Gearset::Green, Direction::Forward),
-        Motor::new(peripherals.port_10, Gearset::Green, Direction::Forward),
+        Motor::new(peripherals.port_9, Gearset::Blue, Direction::Forward),
+        Motor::new(peripherals.port_8, Gearset::Blue, Direction::Reverse),
+        Motor::new(peripherals.port_7, Gearset::Blue, Direction::Reverse),
     ]);
     let right_motors = Box::new([
-        Motor::new(peripherals.port_11, Gearset::Green, Direction::Reverse),
-        Motor::new(peripherals.port_2, Gearset::Green, Direction::Reverse),
-        Motor::new(peripherals.port_1, Gearset::Green, Direction::Reverse),
+        Motor::new(peripherals.port_3, Gearset::Blue, Direction::Reverse),
+        Motor::new(peripherals.port_2, Gearset::Blue, Direction::Forward),
+        Motor::new(peripherals.port_1, Gearset::Blue, Direction::Forward),
     ]);
+
+    let mut imu = InertialSensor::new(peripherals.port_6);
+    match imu.calibrate().await {
+        Ok(_) => (),
+        Err(_) => println!("Inertial Error Bitch"),
+    }
 
     let chassis = Chassis::new(
         left_motors,
         right_motors,
-        chassis::JoystickType::SplitArcade,
-        Pid::new(0.0, 0.0, 0.0, 0.0),
-        Pid::new(0.0, 0.0, 0.0, 0.0),
+        Pid::new(0.0, 0.0, 0.0, 0.0), // linear
+        Pid::new(0.001, 0.0, 0.0, 0.0), // angular
+        imu,
     );
+
+    let mut clamp = AdiSolenoid::new(peripherals.adi_a);
+    let mut doinker = AdiSolenoid::new(peripherals.adi_b);
+
+    clamp.open().ok();
+    doinker.open().ok();
 
     let robot = Robot {
         chassis,
-        intake: Motor::new(peripherals.port_7, Gearset::Blue, Direction::Forward),
-        flick: Motor::new(peripherals.port_5, Gearset::Blue, Direction::Forward),
-        lift: Motor::new(peripherals.port_6, Gearset::Green, Direction::Forward),
-        color_sensor: OpticalSensor::new(peripherals.port_9),
-        color_guard: AdiSolenoid::new(peripherals.adi_a),
-        clamp: AdiSolenoid::new(peripherals.adi_b),
+        intake: Motor::new(peripherals.port_15, Gearset::Blue, Direction::Forward),
+        flick: Motor::new(peripherals.port_14, Gearset::Red, Direction::Forward),
+        lift: Motor::new(peripherals.port_10, Gearset::Green, Direction::Forward),
+        clamp,
+        doinker,
         controller: peripherals.primary_controller,
         pose: Arc::new(Mutex::new(Pose::new(0.0, 0.0, 0.0))),
     };
@@ -178,7 +243,7 @@ async fn main(peripherals: Peripherals) {
         robot.pose.clone(),
         RotationSensor::new(peripherals.port_13, Direction::Forward),
         RotationSensor::new(peripherals.port_12, Direction::Forward),
-        InertialSensor::new(peripherals.port_8),
+        InertialSensor::new(peripherals.port_11),
     );
 
     start(odometry);
