@@ -1,21 +1,26 @@
 use alloc::{boxed::Box, sync::Arc};
-use core::{
-    f64::consts::PI,
-    time::Duration,
-};
+use core::{f64::consts::PI, time::Duration};
 
 use vexide::{
-    core::{println, sync::Mutex},
+    core::sync::Mutex,
     prelude::{sleep, BrakeMode, Float, InertialSensor, Motor},
 };
 
-use crate::{mappings::{ControllerMappings, DriveMode}, odometry::Pose, pid::Pid, vector::Vec2};
+use crate::{
+    mappings::{ControllerMappings, DriveMode},
+    odometry::{Pose, SensorError},
+    pid::Pid,
+    vector::Vec2,
+};
 
 const DIAMETER: f64 = 3.25;
-const GEAR_RATIO: f64 = 36.0 / 48.0;
+const GEAR_RATIO: f64 = 48.0 / 60.0;
 const DISTANCE_PER_REVOLUTION: f64 = DIAMETER * PI * GEAR_RATIO;
 
 pub enum TargetType {
+    // Coordinate won't be used as 
+    // odom wheels won't be used ether
+    #[allow(dead_code)]
     Coordinate(Vec2),
     Distance(f64),
     None,
@@ -40,7 +45,7 @@ impl Chassis {
         right_motors: Box<[Motor]>,
         linear: Pid,
         angular: Pid,
-        imu: InertialSensor
+        imu: InertialSensor,
     ) -> Self {
         Self {
             left_motors,
@@ -83,12 +88,16 @@ impl Chassis {
             }
         }
 
-        (left_val * Motor::MAX_VOLTAGE, right_val * Motor::MAX_VOLTAGE)
+        (
+            left_val * Motor::MAX_VOLTAGE,
+            right_val * Motor::MAX_VOLTAGE,
+        )
     }
 
-    pub async fn run(&mut self) {
+    pub async fn run(&mut self, speed: f64) -> Result<(), SensorError> {
         let mut time = 0u16;
 
+        self.left_motors[0].reset_position()?;
         loop {
             let drive_error = match self.drive {
                 TargetType::Coordinate(target) => {
@@ -97,7 +106,7 @@ impl Chassis {
                 }
                 TargetType::Distance(target) => {
                     target
-                        - self.left_motors[0].position().unwrap().as_revolutions()
+                        - self.left_motors[0].position()?.as_revolutions()
                             * DISTANCE_PER_REVOLUTION
                 }
                 TargetType::None => 0.0,
@@ -107,44 +116,49 @@ impl Chassis {
                 TargetType::Coordinate(target) => {
                     let pose = self.pose.lock().await;
                     (target.y - pose.position.y).atan2(target.x - pose.position.x)
-                },
+                }
                 TargetType::Distance(target) => {
                     // let pose = self.pose.lock().await;
                     normalize_angle(
-                        normalize_angle(target) - normalize_angle(self.imu.heading().unwrap())
+                        normalize_angle(target) - normalize_angle(self.imu.heading()?),
                     )
                 }
                 TargetType::None => 0.0,
             };
 
-            if /*(drive_error.abs() < 0.5 && turn_error.abs() < 0.5) ||*/ time > 5000 {
+            if (drive_error.abs() < 0.5 && turn_error.abs() < 0.5) || time > 5000 {
                 break;
             }
 
             let drive_output = self.linear.output(drive_error);
             let turn_output = self.angular.output(turn_error);
 
-            println!("{}", drive_output);
-            println!("{}", turn_output);
-
             self.set_voltage((
-                (drive_output + turn_output) * Motor::MAX_VOLTAGE,
-                (drive_output - turn_output) * Motor::MAX_VOLTAGE,
+                (drive_output + turn_output) * speed * Motor::MAX_VOLTAGE,
+                (drive_output - turn_output) * speed * Motor::MAX_VOLTAGE,
             ));
 
             time += 10;
             sleep(Duration::from_millis(10)).await;
         }
 
-        self.brake(BrakeMode::Coast);
+        self.brake(BrakeMode::Brake);
+        sleep(Duration::from_millis(250)).await;
+
+        Ok(())
+    }
+
+    pub fn set_target(&mut self, target_pos: TargetType, target_ang: TargetType) {
+        self.drive = target_pos;
+        self.turn = target_ang;
     }
 
     pub fn set_drive_target(&mut self, target: TargetType) {
-        self.drive = target;
+        self.set_target(target, TargetType::None);
     }
 
     pub fn set_turn_target(&mut self, target: TargetType) {
-        self.turn = target;
+        self.set_target(TargetType::None, target);
     }
 
     pub fn set_voltage(&mut self, power: (f64, f64)) {
@@ -180,7 +194,7 @@ fn get_acceleration(power: f64, acceleration: i32) -> f64 {
         return power;
     }
 
-    power.powi(acceleration - 1) / 1.0.powi(acceleration - 1)
+    power.powi(acceleration - 1)
         * if acceleration % 2 == 0 {
             power.abs()
         } else {

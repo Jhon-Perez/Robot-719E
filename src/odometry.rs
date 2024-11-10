@@ -3,7 +3,7 @@ use core::time::Duration;
 
 use vexide::{
     core::{println, sync::Mutex},
-    devices::{smart::imu::InertialError, PortError},
+    devices::{smart::{imu::InertialError, motor::MotorError}, PortError},
     prelude::{sleep, spawn, Float, InertialSensor, RotationSensor},
 };
 
@@ -28,14 +28,22 @@ const TM: f64 = 0.0;
 
 const RADIUS: f64 = 2.75;
 
-enum SensorError {
-    PortError(PortError),
+pub enum SensorError {
+    PortError(PortError), // for rotation sensor, find better name
+    #[allow(dead_code)]
+    MotorError(MotorError), // create own error for pid and odom
     InertialSensor(InertialError),
 }
 
 impl From<PortError> for SensorError {
     fn from(e: PortError) -> Self {
         Self::PortError(e)
+    }
+}
+
+impl From<MotorError> for SensorError {
+    fn from(e: MotorError) -> Self {
+        Self::MotorError(e)
     }
 }
 
@@ -134,6 +142,7 @@ pub fn start(mut odom: Odometry) {
                     SensorError::InertialSensor(e) => {
                         println!("Inertial sensor error: {:?}", e);
                     }
+                    SensorError::MotorError(_) => unreachable!(),
                 }
                 return;
             }

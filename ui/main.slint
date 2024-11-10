@@ -1,18 +1,40 @@
-import { Button, VerticalBox } from "std-widgets.slint";
+// import { Button, VerticalBox } from "std-widgets.slint";
 
-export component AppWindow inherits Window {
-    in-out property <int> counter: 42;
+// export component AppWindow inherits Window {
+//     in-out property <int> counter: 42;
+//     callback request-increase-value();
+//     VerticalBox {
+//         Text {
+//             text: "Counter: \{root.counter}";
+//         }
+
+//         Button {
+//             text: "Increase Value";
+//             clicked => {
+//                 root.request-increase-value();
+//             }
+//         }
+//     }
+// }
+import { ComboBox } from "std-widgets.slint";
+
+export component App inherits Window {
+    width: 200px;
+    height: 130px;
+
+    // Property to store the index of the selected item
+    in-out property <int> selected_index: 0;
     callback request-increase-value();
-    VerticalBox {
-        Text {
-            text: "Counter: \{root.counter}";
-        }
 
-        Button {
-            text: "Increase Value";
-            clicked => {
-                root.request-increase-value();
-            }
-        }
+    ComboBox {
+        y: 0px;
+        width: self.preferred-width;
+        height: self.preferred-height;
+        
+        // Define dropdown items
+        model: ["Left AWP (Red)", "Right AWP (Red)", "Left AWP (Blue)", "Right AWP (Blue)"];
+        
+        // Bind ComboBox's current index to the selected_index property
+        current_index: selected_index;
     }
 }

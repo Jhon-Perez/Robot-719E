@@ -9,14 +9,19 @@ mod odometry;
 mod pid;
 mod vector;
 
+use core::time::Duration;
+
 use alloc::{boxed::Box, sync::Arc};
+
+// use slint::{ComponentHandle, SharedString};
+
 use chassis::{Chassis, TargetType};
 use mappings::{ControllerMappings, DriveMode};
 use odometry::{start, Odometry, Pose};
 use pid::Pid;
 use vexide::{
-    core::{sync::Mutex, time::Instant}, prelude::*,
-    prelude::InertialSensor,
+    core::{sync::Mutex, time::Instant},
+    prelude::*,
     startup::banner::themes::THEME_MURICA,
 };
 
@@ -25,15 +30,13 @@ use vexide::{
 struct Robot {
     chassis: chassis::Chassis,
 
-    intake: Motor,
-    flick: Motor,
-    lift: Motor,
+    intake: (Motor, Motor),
 
-    pub clamp: AdiSolenoid,
-    pub doinker: AdiSolenoid,
+    clamp: (AdiSolenoid, AdiSolenoid),
 
     controller: Controller,
 
+    pub auton_selection: u8,
     pub pose: Arc<Mutex<Pose>>,
 }
 
@@ -41,39 +44,91 @@ impl Compete for Robot {
     async fn autonomous(&mut self) {
         println!("Autonomous control started.");
 
-        let somewhere = vector::Vec2::new(10.0, 10.0);
-        self.chassis
-            .set_drive_target(TargetType::Coordinate(somewhere));
-        self.chassis.set_turn_target(TargetType::Distance(100.0));
+        const AUTON_SELECTOR: u8 = 1;
 
-        self.chassis.run().await;
+        self.clamp.0.open().ok();
+        self.clamp.1.open().ok();
+
+        // Later on do some error handling or something instead of throwing away the error
+        match AUTON_SELECTOR {
+            0 => {
+                self.chassis.set_drive_target(TargetType::Distance(40.0));
+                self.chassis.run(0.5).await.ok();
+
+                sleep(Duration::from_millis(500)).await;
+
+                self.intake.0.set_voltage(Motor::MAX_VOLTAGE).ok();
+                self.intake.0.set_voltage(Motor::MAX_VOLTAGE).ok();
+
+                self.clamp.0.close().ok();
+                self.clamp.1.close().ok();
+
+                sleep(Duration::from_millis(250)).await;
+
+                self.chassis.set_drive_target(TargetType::Distance(6.0));
+                self.chassis.run(1.0).await.ok();
+
+                self.chassis.set_turn_target(TargetType::Distance(90.0));
+                self.chassis.run(1.0).await.ok();
+
+                self.chassis.set_drive_target(TargetType::Distance(-26.0));
+                self.chassis.run(1.0).await.ok();
+
+                self.chassis.set_turn_target(TargetType::Distance(180.0));
+                self.chassis.run(1.0).await.ok();
+
+                self.chassis.set_drive_target(TargetType::Distance(-16.0));
+                self.chassis.run(1.0).await.ok();
+
+                self.chassis.set_turn_target(TargetType::Distance(90.0));
+                self.chassis.run(1.0).await.ok();
+
+                self.chassis.set_drive_target(TargetType::Distance(20.0));
+                self.chassis.run(1.0).await.ok();
+
+                self.clamp.0.open().ok();
+                self.clamp.1.open().ok();
+            }
+            1 => {
+                self.clamp.0.close().ok();
+                self.clamp.1.close().ok();
+                self.chassis.set_drive_target(TargetType::Distance(-52.0));
+                self.chassis.run(0.4).await.ok();
+
+                self.clamp.0.open().ok();
+                self.clamp.1.open().ok();
+
+                self.intake.0.set_velocity(250).ok();
+                self.intake.1.set_velocity(250).ok();
+
+                sleep(Duration::from_millis(1000)).await;
+
+                self.intake.0.set_velocity(0).ok();
+                self.intake.1.set_velocity(0).ok();
+
+                self.chassis.set_turn_target(TargetType::Distance(30.0));
+                self.chassis.run(1.0).await.ok();
+            }
+            _ => (),
+        }
     }
 
     async fn driver(&mut self) {
         println!("Driver control started.");
 
-        const FLICK_MAX_ANGLE: f64 = 135.0;
-        const INTAKE_ANGLE: f64 = 30.0;
-        const FLICK_TOLERANCE: f64 = 100.0;
-        const FLICK_GEAR_RATIO: f64 = 36.0 / 60.0;
-        let mut flick_stage = (0..4).cycle();
-        // let mut flick_scored = false;
-        // let mut turn = false;
-        let mut stage = 0;
-
         let mappings = ControllerMappings {
-            drive_mode: DriveMode::SplitArcade {
-                power: &self.controller.left_stick,
-                turn: &self.controller.right_stick,
+            drive_mode: DriveMode::Arcade {
+                arcade: &self.controller.right_stick,
             },
             intake: &self.controller.right_trigger_1,
             outake: &self.controller.right_trigger_2,
-            lift_up: &self.controller.button_up,
-            lift_down: &self.controller.button_down,
-            flick: &mut self.controller.button_b,
-            clamp: &mut self.controller.button_y,
-            doinker: &mut self.controller.button_right,
+            clamp: &mut self.controller.left_trigger_1,
+            drive_pid_test: &self.controller.button_x,
+            turn_pid_test: &self.controller.button_a,
         };
+
+        self.clamp.0.open().ok();
+        self.clamp.1.open().ok();
 
         loop {
             let start_time = Instant::now();
@@ -82,99 +137,30 @@ impl Compete for Robot {
             self.chassis.set_voltage(power);
 
             if mappings.intake.is_pressed().unwrap_or_default() {
-                self.intake.set_voltage(Motor::MAX_VOLTAGE).ok();
+                self.intake.0.set_voltage(Motor::MAX_VOLTAGE).ok();
+                self.intake.1.set_voltage(Motor::MAX_VOLTAGE).ok();
             } else if mappings.outake.is_pressed().unwrap_or_default() {
-                self.intake.set_voltage(-Motor::MAX_VOLTAGE).ok();
+                self.intake.0.set_voltage(-Motor::MAX_VOLTAGE).ok();
+                self.intake.1.set_voltage(-Motor::MAX_VOLTAGE).ok();
             } else {
-                self.intake.brake(BrakeMode::Coast).ok();
+                self.intake.0.brake(BrakeMode::Coast).ok();
+                self.intake.1.brake(BrakeMode::Coast).ok();
             }
 
-            if mappings.lift_up.is_pressed().unwrap_or_default() {
-                self.lift.set_voltage(Motor::MAX_VOLTAGE).ok();
-            } else if mappings.lift_down.is_pressed().unwrap_or_default() {
-                self.lift.set_voltage(-Motor::MAX_VOLTAGE).ok();
-            } else {
-                self.lift.brake(BrakeMode::Coast).ok();
-            }
-
-            // if self.controller.button_up.is_pressed().unwrap_or_default() {
-            //     self.chassis.set_drive_target(TargetType::None);
-            //     self.chassis.set_turn_target(TargetType::Distance(180.0));
-            //     self.chassis.run().await;
-            // } else if self.controller.button_down.is_pressed().unwrap_or_default() {
-            //     self.chassis.set_drive_target(TargetType::None);
-            //     self.chassis.set_turn_target(TargetType::None);
-            //     self.chassis.run().await;
-            // }
-
-            // if mappings.flick.is_pressed().unwrap_or_default() {
-            //     turn = true;
-            // }
-
-            // if turn {
-            //     if let Ok(angle) = self.flick.position() {
-            //         println!("t raw angle: {}", angle.as_degrees());
-            //         let angle = angle.as_degrees();
-            //         println!("angle: {}", angle);
-            //         if !flick_scored {
-            //             if angle < FLICK_MAX_ANGLE {
-            //                 self.flick.set_voltage(10.0).ok();
-            //             } else {
-            //                 flick_scored = true;
-            //             }
-            //         } else if angle > FLICK_TOLERANCE {
-            //             self.flick.set_voltage(-10.0).ok();
-            //         } else {
-            //             self.flick.brake(BrakeMode::Coast).ok();
-            //             flick_scored = false;
-            //             turn = false;
-            //         }
-            //     }
-            // }
-
-            if let Ok(angle) = self.flick.position() {
-                if mappings.flick.was_pressed().unwrap_or_default() {
-                    stage = flick_stage.next().unwrap();
-                }
-                let angle = angle.as_degrees() * FLICK_GEAR_RATIO;
-                match stage {
-                    1 => {
-                        if angle < INTAKE_ANGLE {
-                            self.flick.set_voltage(8.0).ok();
-                        } else {
-                            self.flick.brake(BrakeMode::Hold).ok();
-                        }
-                    }
-                    2 => {
-                        if angle < FLICK_MAX_ANGLE {
-                            self.flick.set_voltage(8.0).ok();
-                        } else {
-                            self.flick.brake(BrakeMode::Hold).ok();
-                        }
-                    }
-                    3 => {
-                        if angle > FLICK_TOLERANCE {
-                            self.flick.set_voltage(-8.0).ok();
-                        } else {
-                            self.flick.brake(BrakeMode::Coast).ok();
-                            flick_stage.next();
-                        }
-                    }
-                    _ => ()
-                }
+            if mappings.turn_pid_test.is_pressed().unwrap_or_default() {
+                self.chassis.set_turn_target(TargetType::Distance(180.0));
+                self.chassis.run(1.0).await.ok();
+            } else if mappings.drive_pid_test.is_pressed().unwrap_or_default() {
+                self.chassis.set_drive_target(TargetType::Distance(10.0));
+                self.chassis.run(1.0).await.ok();
             }
 
             if mappings.clamp.was_pressed().unwrap_or_default() {
-                self.clamp.toggle().ok();
-            }
-
-            if mappings.doinker.was_pressed().unwrap_or_default() {
-                self.doinker.toggle().ok();
+                self.clamp.0.toggle().ok();
+                self.clamp.1.toggle().ok();
             }
 
             sleep_until(start_time + Controller::UPDATE_INTERVAL).await;
-            // println!("{:?}", start_time);
-            // sleep(Controller::UPDATE_INTERVAL).await;
         }
     }
 }
@@ -183,70 +169,65 @@ impl Compete for Robot {
 async fn main(peripherals: Peripherals) {
     println!("Program started.");
 
-    // initialize_slint_platform(peripherals.screen);
-
-    // let ui = AppWindow::new().unwrap();
-
-    // ui.on_request_increase_value({
-    //     let ui_handler = ui.as_weak();
-    //     move || {
-    //         let ui = ui_handler.unwrap();
-    //         ui.set_counter(ui.get_counter() + 1);
-    //     }
-    // });
-
-    // ui.run().unwrap();
-
     let left_motors = Box::new([
-        Motor::new(peripherals.port_9, Gearset::Blue, Direction::Forward),
-        Motor::new(peripherals.port_8, Gearset::Blue, Direction::Reverse),
-        Motor::new(peripherals.port_7, Gearset::Blue, Direction::Reverse),
+        Motor::new(peripherals.port_15, Gearset::Blue, Direction::Reverse),
+        Motor::new(peripherals.port_18, Gearset::Blue, Direction::Reverse),
+        Motor::new(peripherals.port_6, Gearset::Blue, Direction::Forward),
     ]);
     let right_motors = Box::new([
-        Motor::new(peripherals.port_3, Gearset::Blue, Direction::Reverse),
-        Motor::new(peripherals.port_2, Gearset::Blue, Direction::Forward),
-        Motor::new(peripherals.port_1, Gearset::Blue, Direction::Forward),
+        Motor::new(peripherals.port_5, Gearset::Blue, Direction::Forward),
+        Motor::new(peripherals.port_16, Gearset::Blue, Direction::Forward),
+        Motor::new(peripherals.port_17, Gearset::Blue, Direction::Reverse),
     ]);
 
-    let mut imu = InertialSensor::new(peripherals.port_6);
+    let mut imu = InertialSensor::new(peripherals.port_19);
     match imu.calibrate().await {
-        Ok(_) => (),
-        Err(_) => println!("Inertial Error Bitch"),
+        Ok(_) => println!("Inertial Sensor Sucessfully Calibrated"),
+        Err(_) => println!("Inertial Error"),
     }
 
     let chassis = Chassis::new(
         left_motors,
         right_motors,
-        Pid::new(0.0, 0.0, 0.0, 0.0), // linear
-        Pid::new(0.001, 0.0, 0.0, 0.0), // angular
+        Pid::new(0.1, 0.0, 0.0, 0.0),  // linear
+        Pid::new(0.1, 0.005, 1.25, 0.20), // angular
         imu,
     );
 
-    let mut clamp = AdiSolenoid::new(peripherals.adi_a);
-    let mut doinker = AdiSolenoid::new(peripherals.adi_b);
-
-    clamp.open().ok();
-    doinker.open().ok();
 
     let robot = Robot {
         chassis,
-        intake: Motor::new(peripherals.port_15, Gearset::Blue, Direction::Forward),
-        flick: Motor::new(peripherals.port_14, Gearset::Red, Direction::Forward),
-        lift: Motor::new(peripherals.port_10, Gearset::Green, Direction::Forward),
-        clamp,
-        doinker,
+        intake: (
+            Motor::new(peripherals.port_20, Gearset::Blue, Direction::Forward),
+            Motor::new(peripherals.port_8, Gearset::Blue, Direction::Reverse),
+        ),
+        clamp: (AdiSolenoid::new(peripherals.adi_h), AdiSolenoid::new(peripherals.adi_g)),
         controller: peripherals.primary_controller,
+        auton_selection: 0,
         pose: Arc::new(Mutex::new(Pose::new(0.0, 0.0, 0.0))),
     };
 
     let odometry = Odometry::new(
         robot.pose.clone(),
-        RotationSensor::new(peripherals.port_13, Direction::Forward),
-        RotationSensor::new(peripherals.port_12, Direction::Forward),
-        InertialSensor::new(peripherals.port_11),
+        RotationSensor::new(peripherals.port_10, Direction::Forward),
+        RotationSensor::new(peripherals.port_9, Direction::Forward),
+        InertialSensor::new(peripherals.port_3),
     );
 
     start(odometry);
+
+    // initialize_slint_platform(peripherals.screen);
+
+    // let app = App::new().unwrap();
+
+    // let selected_value_backend = Rc::new(RefCell::new(String::new()));
+
+    // app.on_selected_index_changed(|index| {
+    //     robot.auton_selection = index;
+    //     println!("Selected item: {}", robot.auton_selection);
+    // });
+
+    // app.run().unwrap();
 
     robot.compete().await;
 }

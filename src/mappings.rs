@@ -1,13 +1,18 @@
 use vexide::devices::controller::{Button, Joystick};
 
 pub enum DriveMode<'a> {
+    // SplitArcade and Tank won't be used currently,
+    // this will change when a ui is used to easily
+    // switch between these controllers.
     Arcade {
         arcade: &'a Joystick,
     },
+    #[allow(dead_code)]
     SplitArcade {
         power: &'a Joystick,
         turn: &'a Joystick,
     },
+    #[allow(dead_code)]
     Tank {
         left: &'a Joystick,
         right: &'a Joystick,
@@ -21,11 +26,8 @@ pub struct ControllerMappings<'a> {
     pub intake: &'a Button,
     pub outake: &'a Button,
 
-    pub lift_up: &'a Button,
-    pub lift_down: &'a Button,
-
-    pub flick: &'a mut Button,
-    
     pub clamp: &'a mut Button,
-    pub doinker: &'a mut Button,
+
+    pub drive_pid_test: &'a Button,
+    pub turn_pid_test: &'a Button,
 }
