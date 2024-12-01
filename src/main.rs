@@ -17,7 +17,7 @@ use alloc::{boxed::Box, sync::Arc};
 
 use chassis::{Chassis, TargetType};
 use mappings::{ControllerMappings, DriveMode};
-use odometry::{start, Odometry, Pose};
+use odometry::{Odometry, Pose};
 use pid::Pid;
 use vexide::{
     core::{sync::Mutex, time::Instant},
@@ -30,9 +30,10 @@ use vexide::{
 struct Robot {
     chassis: chassis::Chassis,
 
-    intake: (Motor, Motor),
+    intake: Motor,
+    lady_brown: Motor,
 
-    clamp: (AdiSolenoid, AdiSolenoid),
+    clamp: (AdiDigitalOut, AdiDigitalOut),
 
     controller: Controller,
 
@@ -45,9 +46,9 @@ impl Compete for Robot {
         println!("Autonomous control started.");
 
         const AUTON_SELECTOR: u8 = 1;
+        self.clamp.0.set_high().ok();
+        self.clamp.1.set_high().ok();
 
-        self.clamp.0.open().ok();
-        self.clamp.1.open().ok();
 
         // Later on do some error handling or something instead of throwing away the error
         match AUTON_SELECTOR {
@@ -57,11 +58,10 @@ impl Compete for Robot {
 
                 sleep(Duration::from_millis(500)).await;
 
-                self.intake.0.set_voltage(Motor::MAX_VOLTAGE).ok();
-                self.intake.0.set_voltage(Motor::MAX_VOLTAGE).ok();
+                self.intake.set_voltage(Motor::V5_MAX_VOLTAGE).ok();
 
-                self.clamp.0.close().ok();
-                self.clamp.1.close().ok();
+                self.clamp.0.set_low().ok();
+                self.clamp.1.set_low().ok();
 
                 sleep(Duration::from_millis(250)).await;
 
@@ -86,29 +86,10 @@ impl Compete for Robot {
                 self.chassis.set_drive_target(TargetType::Distance(20.0));
                 self.chassis.run(1.0).await.ok();
 
-                self.clamp.0.open().ok();
-                self.clamp.1.open().ok();
+                self.clamp.0.set_high().ok();
+                self.clamp.1.set_high().ok();
             }
-            1 => {
-                self.clamp.0.close().ok();
-                self.clamp.1.close().ok();
-                self.chassis.set_drive_target(TargetType::Distance(-52.0));
-                self.chassis.run(0.4).await.ok();
-
-                self.clamp.0.open().ok();
-                self.clamp.1.open().ok();
-
-                self.intake.0.set_velocity(250).ok();
-                self.intake.1.set_velocity(250).ok();
-
-                sleep(Duration::from_millis(1000)).await;
-
-                self.intake.0.set_velocity(0).ok();
-                self.intake.1.set_velocity(0).ok();
-
-                self.chassis.set_turn_target(TargetType::Distance(30.0));
-                self.chassis.run(1.0).await.ok();
-            }
+            1 => {}
             _ => (),
         }
     }
@@ -116,51 +97,86 @@ impl Compete for Robot {
     async fn driver(&mut self) {
         println!("Driver control started.");
 
-        let mappings = ControllerMappings {
-            drive_mode: DriveMode::Arcade {
-                arcade: &self.controller.right_stick,
-            },
-            intake: &self.controller.right_trigger_1,
-            outake: &self.controller.right_trigger_2,
-            clamp: &mut self.controller.left_trigger_1,
-            drive_pid_test: &self.controller.button_x,
-            turn_pid_test: &self.controller.button_a,
-        };
+        const LADY_ANGLES: [f64; 4] = [
+            100.0, // flick tolerance
+            30.0,  // Intake
+            110.0, // Align
+            135.0, // Scoring
+        ];
 
-        self.clamp.0.open().ok();
-        self.clamp.1.open().ok();
+        let mut lady_stages = (0..LADY_ANGLES.len()).cycle();
+        let mut stage = 0;
+
+        self.clamp.0.set_high().ok();
+        self.clamp.1.set_high().ok();
 
         loop {
-            let start_time = Instant::now();
+            let delay = Instant::now() + Controller::UPDATE_INTERVAL;
+
+            let state = self.controller.state().unwrap_or_default();
+
+            let mappings = ControllerMappings {
+                drive_mode: DriveMode::Arcade {
+                    arcade: state.right_stick,
+                },
+                intake: state.button_r1,
+                outake: state.button_r2,
+                lady_brown: state.button_y,
+                clamp: state.button_l1,
+                drive_pid_test: state.button_x,
+                turn_pid_test: state.button_a,
+            };
 
             let power = self.chassis.differential_drive(&mappings);
             self.chassis.set_voltage(power);
 
-            if mappings.intake.is_pressed().unwrap_or_default() {
-                self.intake.0.set_voltage(Motor::MAX_VOLTAGE).ok();
-                self.intake.1.set_voltage(Motor::MAX_VOLTAGE).ok();
-            } else if mappings.outake.is_pressed().unwrap_or_default() {
-                self.intake.0.set_voltage(-Motor::MAX_VOLTAGE).ok();
-                self.intake.1.set_voltage(-Motor::MAX_VOLTAGE).ok();
+            if mappings.intake.is_pressed() {
+                self.intake.set_voltage(Motor::V5_MAX_VOLTAGE).ok();
+            } else if mappings.outake.is_pressed() {
+                self.intake.set_voltage(-Motor::V5_MAX_VOLTAGE).ok();
             } else {
-                self.intake.0.brake(BrakeMode::Coast).ok();
-                self.intake.1.brake(BrakeMode::Coast).ok();
+                self.intake.brake(BrakeMode::Coast).ok();
             }
 
-            if mappings.turn_pid_test.is_pressed().unwrap_or_default() {
+            if let Ok(angle) = self.lady_brown.position() {
+                if mappings.lady_brown.is_now_pressed() {
+                    stage = lady_stages.next().unwrap();
+                }
+
+                let angle = angle.as_degrees(); // if needed multiply with gear ratio
+                match stage {
+                    0 => {
+                        if angle > LADY_ANGLES[stage] {
+                            self.lady_brown.set_voltage(-Motor::V5_MAX_VOLTAGE).ok();
+                        } else {
+                            self.lady_brown.brake(BrakeMode::Coast).ok();
+                        }
+                    }
+                    1..4 => {
+                        if angle < LADY_ANGLES[stage] {
+                            self.lady_brown.set_voltage(Motor::V5_MAX_VOLTAGE).ok();
+                        } else {
+                            self.lady_brown.brake(BrakeMode::Hold).ok();
+                        }
+                    }
+                    _ => unreachable!(),
+                }
+            }
+
+            if mappings.turn_pid_test.is_pressed() {
                 self.chassis.set_turn_target(TargetType::Distance(180.0));
                 self.chassis.run(1.0).await.ok();
-            } else if mappings.drive_pid_test.is_pressed().unwrap_or_default() {
+            } else if mappings.drive_pid_test.is_pressed() {
                 self.chassis.set_drive_target(TargetType::Distance(10.0));
                 self.chassis.run(1.0).await.ok();
             }
 
-            if mappings.clamp.was_pressed().unwrap_or_default() {
+            if mappings.clamp.is_now_pressed() {
                 self.clamp.0.toggle().ok();
                 self.clamp.1.toggle().ok();
             }
 
-            sleep_until(start_time + Controller::UPDATE_INTERVAL).await;
+            sleep_until(delay).await;
         }
     }
 }
@@ -194,14 +210,14 @@ async fn main(peripherals: Peripherals) {
         imu,
     );
 
-
     let robot = Robot {
         chassis,
-        intake: (
-            Motor::new(peripherals.port_20, Gearset::Blue, Direction::Forward),
-            Motor::new(peripherals.port_8, Gearset::Blue, Direction::Reverse),
+        intake: Motor::new(peripherals.port_20, Gearset::Blue, Direction::Forward),
+        lady_brown: Motor::new(peripherals.port_8, Gearset::Blue, Direction::Reverse),
+        clamp: (
+            AdiDigitalOut::new(peripherals.adi_h),
+            AdiDigitalOut::new(peripherals.adi_g),
         ),
-        clamp: (AdiSolenoid::new(peripherals.adi_h), AdiSolenoid::new(peripherals.adi_g)),
         controller: peripherals.primary_controller,
         auton_selection: 0,
         pose: Arc::new(Mutex::new(Pose::new(0.0, 0.0, 0.0))),
@@ -214,9 +230,8 @@ async fn main(peripherals: Peripherals) {
         InertialSensor::new(peripherals.port_3),
     );
 
-    start(odometry);
-
     // initialize_slint_platform(peripherals.screen);
+    odometry::start(odometry);
 
     // let app = App::new().unwrap();
 

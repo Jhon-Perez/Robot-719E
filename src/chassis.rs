@@ -18,9 +18,6 @@ const GEAR_RATIO: f64 = 48.0 / 60.0;
 const DISTANCE_PER_REVOLUTION: f64 = DIAMETER * PI * GEAR_RATIO;
 
 pub enum TargetType {
-    // Coordinate won't be used as 
-    // odom wheels won't be used ether
-    #[allow(dead_code)]
     Coordinate(Vec2),
     Distance(f64),
     None,
@@ -67,16 +64,16 @@ impl Chassis {
 
         match mappings.drive_mode {
             DriveMode::Arcade { arcade } => {
-                power_val = arcade.y().unwrap_or_default();
-                turn_val = arcade.x().unwrap_or_default();
+                power_val = arcade.y();
+                turn_val = arcade.x();
             }
             DriveMode::SplitArcade { power, turn } => {
-                power_val = power.y().unwrap_or_default();
-                turn_val = turn.x().unwrap_or_default();
+                power_val = power.y();
+                turn_val = turn.x();
             }
             DriveMode::Tank { left, right } => {
-                left_val = left.y().unwrap_or_default();
-                right_val = right.y().unwrap_or_default();
+                left_val = left.y();
+                right_val = right.y();
             }
         }
 
@@ -89,8 +86,8 @@ impl Chassis {
         }
 
         (
-            left_val * Motor::MAX_VOLTAGE,
-            right_val * Motor::MAX_VOLTAGE,
+            left_val * Motor::V5_MAX_VOLTAGE,
+            right_val * Motor::V5_MAX_VOLTAGE,
         )
     }
 
@@ -106,8 +103,7 @@ impl Chassis {
                 }
                 TargetType::Distance(target) => {
                     target
-                        - self.left_motors[0].position()?.as_revolutions()
-                            * DISTANCE_PER_REVOLUTION
+                        - self.left_motors[0].position()?.as_revolutions() * DISTANCE_PER_REVOLUTION
                 }
                 TargetType::None => 0.0,
             };
@@ -119,9 +115,7 @@ impl Chassis {
                 }
                 TargetType::Distance(target) => {
                     // let pose = self.pose.lock().await;
-                    normalize_angle(
-                        normalize_angle(target) - normalize_angle(self.imu.heading()?),
-                    )
+                    normalize_angle(normalize_angle(target) - normalize_angle(self.imu.heading()?))
                 }
                 TargetType::None => 0.0,
             };
@@ -134,8 +128,8 @@ impl Chassis {
             let turn_output = self.angular.output(turn_error);
 
             self.set_voltage((
-                (drive_output + turn_output) * speed * Motor::MAX_VOLTAGE,
-                (drive_output - turn_output) * speed * Motor::MAX_VOLTAGE,
+                (drive_output + turn_output) * speed * Motor::V5_MAX_VOLTAGE,
+                (drive_output - turn_output) * speed * Motor::V5_MAX_VOLTAGE,
             ));
 
             time += 10;
