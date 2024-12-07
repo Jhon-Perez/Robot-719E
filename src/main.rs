@@ -7,6 +7,7 @@ mod chassis;
 mod mappings;
 mod odometry;
 mod pid;
+mod subsystems;
 mod vector;
 
 use core::time::Duration;
@@ -19,8 +20,10 @@ use chassis::{Chassis, TargetType};
 use mappings::{ControllerMappings, DriveMode};
 use odometry::{Odometry, Pose};
 use pid::Pid;
+use subsystems::{intake::Intake, lady_brown::LadyBrown};
 use vexide::{
     core::{sync::Mutex, time::Instant},
+    devices::adi::digital::LogicLevel,
     prelude::*,
     startup::banner::themes::THEME_MURICA,
 };
@@ -30,14 +33,14 @@ use vexide::{
 struct Robot {
     chassis: chassis::Chassis,
 
-    intake: Motor,
-    lady_brown: Motor,
+    intake: Intake,
+    intake_lift: AdiDigitalOut,
+    lady_brown: Arc<Mutex<LadyBrown>>,
 
-    clamp: (AdiDigitalOut, AdiDigitalOut),
+    clamp: AdiDigitalOut,
 
     controller: Controller,
 
-    pub auton_selection: u8,
     pub pose: Arc<Mutex<Pose>>,
 }
 
@@ -97,19 +100,6 @@ impl Compete for Robot {
     async fn driver(&mut self) {
         println!("Driver control started.");
 
-        const LADY_ANGLES: [f64; 4] = [
-            100.0, // flick tolerance
-            30.0,  // Intake
-            110.0, // Align
-            135.0, // Scoring
-        ];
-
-        let mut lady_stages = (0..LADY_ANGLES.len()).cycle();
-        let mut stage = 0;
-
-        self.clamp.0.set_high().ok();
-        self.clamp.1.set_high().ok();
-
         loop {
             let delay = Instant::now() + Controller::UPDATE_INTERVAL;
 
@@ -121,50 +111,36 @@ impl Compete for Robot {
                 },
                 intake: state.button_r1,
                 outake: state.button_r2,
+                intake_lift: state.button_b,
                 lady_brown: state.button_y,
-                clamp: state.button_l1,
-                drive_pid_test: state.button_x,
-                turn_pid_test: state.button_a,
+                clamp: state.button_a,
+                drive_pid_test: state.button_left,
+                turn_pid_test: state.button_right,
             };
 
             let power = self.chassis.differential_drive(&mappings);
             self.chassis.set_voltage(power);
 
             if mappings.intake.is_pressed() {
-                self.intake.set_voltage(Motor::V5_MAX_VOLTAGE).ok();
+                self.intake.set_voltage(Motor::V5_MAX_VOLTAGE);
             } else if mappings.outake.is_pressed() {
-                self.intake.set_voltage(-Motor::V5_MAX_VOLTAGE).ok();
+                self.intake.set_voltage(-Motor::V5_MAX_VOLTAGE);
             } else {
-                self.intake.brake(BrakeMode::Coast).ok();
+                self.intake.brake(BrakeMode::Coast);
             }
 
-            if let Ok(angle) = self.lady_brown.position() {
-                if mappings.lady_brown.is_now_pressed() {
-                    stage = lady_stages.next().unwrap();
-                }
+            if mappings.lady_brown.is_now_pressed() {
+                let mut next_data = self.lady_brown.lock().await;
+                next_data.next();
+            }
 
-                let angle = angle.as_degrees(); // if needed multiply with gear ratio
-                match stage {
-                    0 => {
-                        if angle > LADY_ANGLES[stage] {
-                            self.lady_brown.set_voltage(-Motor::V5_MAX_VOLTAGE).ok();
-                        } else {
-                            self.lady_brown.brake(BrakeMode::Coast).ok();
-                        }
-                    }
-                    1..4 => {
-                        if angle < LADY_ANGLES[stage] {
-                            self.lady_brown.set_voltage(Motor::V5_MAX_VOLTAGE).ok();
-                        } else {
-                            self.lady_brown.brake(BrakeMode::Hold).ok();
-                        }
-                    }
-                    _ => unreachable!(),
-                }
+            {
+                let mut next_data = self.lady_brown.lock().await;
+                next_data.run();
             }
 
             if mappings.turn_pid_test.is_pressed() {
-                self.chassis.set_turn_target(TargetType::Distance(180.0));
+                self.chassis.set_turn_target(TargetType::Distance(0.0));
                 self.chassis.run(1.0).await.ok();
             } else if mappings.drive_pid_test.is_pressed() {
                 self.chassis.set_drive_target(TargetType::Distance(10.0));
@@ -172,8 +148,11 @@ impl Compete for Robot {
             }
 
             if mappings.clamp.is_now_pressed() {
-                self.clamp.0.toggle().ok();
-                self.clamp.1.toggle().ok();
+                _ = self.clamp.toggle();
+            }
+
+            if mappings.intake_lift.is_now_pressed() {
+                _ = self.intake_lift.toggle();
             }
 
             sleep_until(delay).await;
@@ -187,16 +166,16 @@ async fn main(peripherals: Peripherals) {
 
     let left_motors = Box::new([
         Motor::new(peripherals.port_15, Gearset::Blue, Direction::Reverse),
-        Motor::new(peripherals.port_18, Gearset::Blue, Direction::Reverse),
-        Motor::new(peripherals.port_6, Gearset::Blue, Direction::Forward),
+        Motor::new(peripherals.port_12, Gearset::Blue, Direction::Forward),
+        Motor::new(peripherals.port_19, Gearset::Blue, Direction::Reverse),
     ]);
     let right_motors = Box::new([
-        Motor::new(peripherals.port_5, Gearset::Blue, Direction::Forward),
-        Motor::new(peripherals.port_16, Gearset::Blue, Direction::Forward),
-        Motor::new(peripherals.port_17, Gearset::Blue, Direction::Reverse),
+        Motor::new(peripherals.port_13, Gearset::Blue, Direction::Forward),
+        Motor::new(peripherals.port_16, Gearset::Blue, Direction::Reverse),
+        Motor::new(peripherals.port_11, Gearset::Blue, Direction::Forward),
     ]);
 
-    let mut imu = InertialSensor::new(peripherals.port_19);
+    let mut imu = InertialSensor::new(peripherals.port_5);
     match imu.calibrate().await {
         Ok(_) => println!("Inertial Sensor Sucessfully Calibrated"),
         Err(_) => println!("Inertial Error"),
@@ -205,30 +184,46 @@ async fn main(peripherals: Peripherals) {
     let chassis = Chassis::new(
         left_motors,
         right_motors,
-        Pid::new(0.1, 0.0, 0.0, 0.0),  // linear
-        Pid::new(0.1, 0.005, 1.25, 0.20), // angular
+        Pid::new(0.0, 0.0, 0.0, 0.0),   // linear
+        Pid::new(0.125, 0.0, 0.25, 0.0), // angular
         imu,
     );
 
     let robot = Robot {
         chassis,
-        intake: Motor::new(peripherals.port_20, Gearset::Blue, Direction::Forward),
-        lady_brown: Motor::new(peripherals.port_8, Gearset::Blue, Direction::Reverse),
-        clamp: (
-            AdiDigitalOut::new(peripherals.adi_h),
-            AdiDigitalOut::new(peripherals.adi_g),
-        ),
+        intake: Intake::new(Motor::new(
+            peripherals.port_2,
+            Gearset::Blue,
+            Direction::Forward,
+        )),
+        intake_lift: AdiDigitalOut::with_initial_level(peripherals.adi_g, LogicLevel::Low),
+        lady_brown: Arc::new(Mutex::new(LadyBrown::new(
+            (
+                Motor::new_exp(peripherals.port_20, Direction::Reverse),
+                Motor::new_exp(peripherals.port_17, Direction::Forward),
+            ),
+            12.0 / 60.0,
+        ))),
+        clamp: AdiDigitalOut::with_initial_level(peripherals.adi_h, LogicLevel::Low),
         controller: peripherals.primary_controller,
-        auton_selection: 0,
         pose: Arc::new(Mutex::new(Pose::new(0.0, 0.0, 0.0))),
     };
 
-    let odometry = Odometry::new(
-        robot.pose.clone(),
-        RotationSensor::new(peripherals.port_10, Direction::Forward),
-        RotationSensor::new(peripherals.port_9, Direction::Forward),
-        InertialSensor::new(peripherals.port_3),
-    );
+    //let mut imu_sensor = InertialSensor::new(peripherals.port_14);
+    //match imu_sensor.calibrate().await {
+    //    Ok(_) => println!("Inertial sensor successfully calibrated"),
+    //    Err(e) => println!("Inertial Error {:?}", e),
+    //}
+    //
+    //let odometry = Odometry::new(
+    //    robot.pose.clone(),
+    //    RotationSensor::new(peripherals.port_4, Direction::Forward),
+    //    RotationSensor::new(peripherals.port_5, Direction::Forward),
+    //    //InertialSensor::new(peripherals.port_3),
+    //    imu_sensor,
+    //);
+    //
+    //odometry::start(odometry);
 
     // initialize_slint_platform(peripherals.screen);
     odometry::start(odometry);

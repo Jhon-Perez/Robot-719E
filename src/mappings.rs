@@ -25,6 +25,7 @@ pub struct ControllerMappings {
 
     pub intake: ButtonState,
     pub outake: ButtonState,
+    pub intake_lift: ButtonState,
 
     pub lady_brown: ButtonState,
 
