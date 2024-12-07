@@ -1,40 +1,87 @@
-// import { Button, VerticalBox } from "std-widgets.slint";
+import { ComboBox, Button, VerticalBox, HorizontalBox } from "std-widgets.slint";
 
-// export component AppWindow inherits Window {
-//     in-out property <int> counter: 42;
-//     callback request-increase-value();
-//     VerticalBox {
-//         Text {
-//             text: "Counter: \{root.counter}";
-//         }
+export struct Autonomous {
+    color: string,
+    index: int,
+    side: string,
+}
 
-//         Button {
-//             text: "Increase Value";
-//             clicked => {
-//                 root.request-increase-value();
-//             }
-//         }
-//     }
-// }
-import { ComboBox } from "std-widgets.slint";
+export component AppWindow inherits Window {
+    width: 480px;
+    height: 240px;
 
-export component App inherits Window {
-    width: 200px;
-    height: 130px;
+    callback autonomous(Autonomous);
+    property<[{x: float, y: float}]> path_coordinates: [
+        { x: 10, y: 10 },
+        { x: 20, y: 10 },
+        { x: 20, y: 20 },
+        { x: 40, y: 40 },
+    ];
 
-    // Property to store the index of the selected item
-    in-out property <int> selected_index: 0;
-    callback request-increase-value();
+    callback request-path();
+    in-out property<image> path_image <=> path.source;
+    
+    HorizontalLayout {
+        spacing: 140px;
 
-    ComboBox {
-        y: 0px;
-        width: self.preferred-width;
-        height: self.preferred-height;
+        VerticalLayout {
+            spacing: 10px;
+            padding: 10px;
+            width: 100px;
+
+            HorizontalLayout {
+                spacing: 5px;
+                height: 40px;
+
+                mode_cb := ComboBox {
+                    width: 160px;
+                    
+                    model: [
+                        "Select Auton",
+                        "Left",
+                        "Right",
+                    ];
+                }
+
+                color_cb := Button {
+                    width: 60px;
+                    checkable: true;
+                    text: self.checked ? @tr("blue") : @tr("red");
+                }
+            }
+
+            Button {
+                text: "save";
+                height: 40px;
+                width: 225px;
+                clicked => {
+                    root.autonomous({
+                        color: color_cb.text,
+                        index: mode_cb.current_index,
+                        side: mode_cb.current_value,
+                    });
+                    root.request-path();
+                }
+            }
+        }
         
-        // Define dropdown items
-        model: ["Left AWP (Red)", "Right AWP (Red)", "Left AWP (Blue)", "Right AWP (Blue)"];
-        
-        // Bind ComboBox's current index to the selected_index property
-        current_index: selected_index;
+        Rectangle {
+            width: 240px;
+            height: 240px;
+            
+            Image {
+                source: @image-url("../images/TopView.svg");
+                width: 100%;
+                height: 100%;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+
+            path := Image {
+                width: parent.width;
+                height: parent.height;
+            }
+        }
     }
 }
+

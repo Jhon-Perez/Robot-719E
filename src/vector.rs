@@ -8,6 +8,7 @@ pub struct Vec2 {
     pub y: f64,
 }
 
+#[allow(dead_code)]
 impl Vec2 {
     pub fn new(x: f64, y: f64) -> Self {
         Self { x, y }
@@ -15,6 +16,20 @@ impl Vec2 {
 
     pub fn get(&self) -> (f64, f64) {
         (self.x, self.y)
+    }
+
+    pub fn get_i32(&self) -> (i32, i32) {
+        (self.x as i32, self.y as i32)
+    }
+
+    pub fn get_f32(&self) -> (f32, f32) {
+        (self.x as f32, self.y as f32)
+    }
+
+    pub fn to_polar(&self) -> (f64, f64) {
+        let r = (self.x.powi(2) + self.y.powi(2)).sqrt();
+        let theta = self.y.atan2(self.x);
+        (r, theta.to_degrees())
     }
 
     pub fn from_polar(radius: f64, angle: f64) -> Self {
@@ -34,6 +49,10 @@ impl Vec2 {
 
     pub fn dot(&self, other: &Self) -> f64 {
         self.x * other.x + self.y * other.y
+    }
+
+    pub fn cross(&self, other: &Self) -> f64 {
+        self.x * other.y - self.y * other.x
     }
 
     pub fn normalize(&self) -> Self {
