@@ -8,13 +8,16 @@ pub enum Command {
     DriveBy(f64),
     TurnBy(f64),
     TurnTo(f64),
+    Speed(f64),
     Sleep(u64),
     ToggleIntake,
+    ToggleIntakeReverse,
+    ToggleIntakePiston,
     ToggleLadyBrown,
     ToggleClamp,
 }
 
-pub fn command_to_coords(path: &[Command]) -> (Vec<Vec2>, Vec<Command>) {
+pub fn command_to_coords(path: &[Command]) -> Vec<Vec2> {
     let coord = match path[0] {
         Command::Coordinate(coordinate) => coordinate,
         _ => panic!("COORDINATE IS THE ONLY SUPPORTED FEATURE AS OF NOW"),
@@ -22,10 +25,10 @@ pub fn command_to_coords(path: &[Command]) -> (Vec<Vec2>, Vec<Command>) {
 
     let mut pose = Pose::new(coord.x, coord.y, 0.0);
     let mut coords = Vec::new();
-    let mut new_path = Vec::new();
+    //let mut new_path = Vec::new();
 
     coords.push(pose.position);
-    new_path.push(Command::Coordinate(pose.position));
+    //new_path.push(Command::Coordinate(pose.position));
 
     for &command in &path[1..] {
         let coord = match command {
@@ -49,7 +52,7 @@ pub fn command_to_coords(path: &[Command]) -> (Vec<Vec2>, Vec<Command>) {
                 None
             }
             _ => {
-                new_path.push(command);
+                //new_path.push(command);
 
                 None
             },
@@ -57,10 +60,11 @@ pub fn command_to_coords(path: &[Command]) -> (Vec<Vec2>, Vec<Command>) {
 
         if let Some(coordinate) = coord {
             coords.push(coordinate);
-            new_path.push(Command::Coordinate(coordinate));
+            //new_path.push(Command::Coordinate(coordinate));
         }
     }
 
-    (coords, new_path)
+    coords
+    //(coords, new_path)
 }
 

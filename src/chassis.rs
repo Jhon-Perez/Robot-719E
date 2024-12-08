@@ -32,8 +32,9 @@ pub struct Chassis {
     angular: Pid,
     drive: TargetType,
     turn: TargetType,
+    speed: f64,
     pose: Arc<Mutex<Pose>>,
-    imu: InertialSensor,
+    pub imu: InertialSensor,
 }
 
 impl Chassis {
@@ -51,6 +52,7 @@ impl Chassis {
             angular,
             drive: TargetType::None,
             turn: TargetType::None,
+            speed: 1.0,
             imu,
             pose: Arc::new(Mutex::new(Pose::new(0.0, 0.0, 0.0))),
         }
@@ -91,7 +93,7 @@ impl Chassis {
         )
     }
 
-    pub async fn run(&mut self, speed: f64) -> Result<(), SensorError> {
+    pub async fn run(&mut self) -> Result<(), SensorError> {
         let mut time = 0u16;
 
         self.left_motors[0].reset_position()?;
@@ -120,7 +122,7 @@ impl Chassis {
                 TargetType::None => 0.0,
             };
 
-            if (drive_error.abs() < 0.5 && turn_error.abs() < 0.5) || time > 5000 {
+            if (drive_error.abs() < 0.5 && turn_error.abs() < 1.0) || time > 5000 {
                 break;
             }
 
@@ -128,8 +130,8 @@ impl Chassis {
             let turn_output = self.angular.output(turn_error);
 
             self.set_voltage((
-                (drive_output + turn_output) * speed * Motor::V5_MAX_VOLTAGE,
-                (drive_output - turn_output) * speed * Motor::V5_MAX_VOLTAGE,
+                (drive_output + turn_output) * self.speed * Motor::V5_MAX_VOLTAGE,
+                (drive_output - turn_output) * self.speed * Motor::V5_MAX_VOLTAGE,
             ));
 
             time += 10;
@@ -140,6 +142,10 @@ impl Chassis {
         sleep(Duration::from_millis(250)).await;
 
         Ok(())
+    }
+
+    pub fn set_speed(&mut self, speed: f64) {
+        self.speed = speed;
     }
 
     pub fn set_target(&mut self, target_pos: TargetType, target_ang: TargetType) {

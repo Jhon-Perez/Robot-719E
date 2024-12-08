@@ -8,7 +8,9 @@ mod command;
 mod image_gen;
 mod mappings;
 mod odometry;
+// mod path;
 mod pid;
+// mod pure_pursuit;
 mod subsystems;
 mod vector;
 
@@ -58,19 +60,31 @@ impl Compete for Robot {
         })
         .detach();
 
+        //_ = self.intake_lift.toggle();
+
         for command in self.auton_path.replace(vec![]) {
             match command {
-                Command::Coordinate(coord) => {
-                    let (radius, angle) = coord.to_polar();
-
+                // no odom so coordinate won't be used
+                Command::Coordinate(_coord) => {}
+                Command::DriveBy(distance) => {
+                    self.chassis.set_drive_target(TargetType::Distance(distance));
+                    _ = self.chassis.run().await;
+                }
+                Command::TurnTo(angle) => {
                     self.chassis.set_turn_target(TargetType::Distance(angle));
-                    _ = self.chassis.run(1.0).await;
-
-                    self.chassis.set_drive_target(TargetType::Distance(radius));
-                    _ = self.chassis.run(1.0).await;
+                    _ = self.chassis.run().await;
+                }
+                Command::Speed(speed) => {
+                    self.chassis.set_speed(speed);
                 }
                 Command::ToggleIntake => {
-                    self.intake.toggle();
+                    self.intake.toggle(1.0);
+                }
+                Command::ToggleIntakeReverse => {
+                    self.intake.toggle(-1.0);
+                }
+                Command::ToggleIntakePiston => {
+                    _ = self.intake_lift.toggle();
                 }
                 Command::ToggleClamp => {
                     _ = self.clamp.toggle();
@@ -82,7 +96,7 @@ impl Compete for Robot {
                 Command::Sleep(delay) => {
                     sleep(Duration::from_millis(delay)).await;
                 }
-                _ => unreachable!(),
+                _ => (),
             };
         }
 
@@ -143,13 +157,17 @@ impl Compete for Robot {
 
             let mappings = ControllerMappings {
                 drive_mode: DriveMode::Arcade {
-                    arcade: state.right_stick,
+                    arcade: state.left_stick,
                 },
-                intake: state.button_r1,
-                outake: state.button_r2,
-                intake_lift: state.button_b,
+                //drive_mode: DriveMode::SplitArcade {
+                //    power: state.left_stick,
+                //    turn: state.right_stick,
+                //},
+                intake: state.button_l1,
+                outake: state.button_l2,
+                intake_lift: state.button_a,
                 lady_brown: state.button_y,
-                clamp: state.button_a,
+                clamp: state.button_r1,
                 drive_pid_test: state.button_left,
                 turn_pid_test: state.button_right,
             };
@@ -177,10 +195,10 @@ impl Compete for Robot {
 
             if mappings.turn_pid_test.is_pressed() {
                 self.chassis.set_turn_target(TargetType::Distance(0.0));
-                self.chassis.run(1.0).await.ok();
+                self.chassis.run().await.ok();
             } else if mappings.drive_pid_test.is_pressed() {
                 self.chassis.set_drive_target(TargetType::Distance(10.0));
-                self.chassis.run(1.0).await.ok();
+                self.chassis.run().await.ok();
             }
 
             if mappings.clamp.is_now_pressed() {
@@ -220,23 +238,31 @@ async fn main(peripherals: Peripherals) {
     let chassis = Chassis::new(
         left_motors,
         right_motors,
-        Pid::new(0.0, 0.0, 0.0, 0.0),   // linear
-        Pid::new(0.125, 0.0, 0.25, 0.0), // angular
+        Pid::new(0.125, 0.0, 0.0, 0.0),   // linear
+        Pid::new(0.125, 0.01, 1.25, 0.25), // angular
         imu,
     );
 
     let robot = Robot {
         chassis,
-        intake: Intake::new(Motor::new(
-            peripherals.port_2,
-            Gearset::Blue,
-            Direction::Forward,
+        intake: Intake::new((
+            Motor::new(
+                peripherals.port_2,
+                Gearset::Blue,
+                Direction::Forward,
+            ),
+            Motor::new(
+                peripherals.port_17,
+                Gearset::Blue,
+                Direction::Forward,
+            ),
         )),
-        intake_lift: AdiDigitalOut::with_initial_level(peripherals.adi_g, LogicLevel::Low),
+        intake_lift: AdiDigitalOut::with_initial_level(peripherals.adi_g, LogicLevel::High),
+        // not used for this compeition
         lady_brown: Arc::new(Mutex::new(LadyBrown::new(
             (
                 Motor::new_exp(peripherals.port_20, Direction::Reverse),
-                Motor::new_exp(peripherals.port_17, Direction::Forward),
+                Motor::new_exp(peripherals.port_18, Direction::Forward),
             ),
             12.0 / 60.0,
         ))),
@@ -272,22 +298,54 @@ async fn main(peripherals: Peripherals) {
         ],
         vec![ // path 1
             Command::Coordinate(Vec2 {
-                x: 0.0,
+                x: 12.0,
                 y: 48.0,
             }), // START THE PATH WITH ITS STARTING POINT
-            Command::DriveBy(46.0), // move forward to clamp goal
-            Command::Sleep(500),
+            Command::Speed(0.8),
+            Command::DriveBy(32.0), // move forward to clamp goal
+            Command::Speed(1.0),
+            Command::Sleep(750),
             Command::ToggleIntake,
             Command::ToggleClamp,
-            Command::Sleep(250),
+            Command::Sleep(500),
             Command::DriveBy(6.0),
             Command::TurnTo(90.0), // turn to face rings
             Command::DriveBy(-26.0), // drive towards rings
             Command::TurnTo(180.0), // turn 45 degrees right
-            Command::DriveBy(-16.0),
-            Command::TurnTo(90.0),
-            Command::DriveBy(20.0),
+            Command::DriveBy(-14.0),
+            Command::TurnTo(-90.0),
+            Command::Speed(0.8),
+            Command::DriveBy(-22.5),
             Command::ToggleIntake,
+        ],
+        vec![ // path 1 (mess up)
+            Command::Coordinate(Vec2 {
+                x: 12.0,
+                y: 48.0,
+            }), // START THE PATH WITH ITS STARTING POINT
+            Command::DriveBy(32.0), // move forward to clamp goal
+            Command::Sleep(750),
+            Command::ToggleIntake,
+            Command::ToggleClamp,
+            Command::Sleep(500),
+            Command::TurnTo(135.0), // turn to face rings
+            Command::ToggleIntakePiston,
+            Command::DriveBy(-28.0), // drive towards rings
+            Command::ToggleIntakeReverse, // INVERSE THIS
+            Command::ToggleIntakePiston,
+            Command::Sleep(1000),
+            Command::ToggleIntake,
+            Command::Sleep(1000),
+            Command::TurnTo(0.0),
+            Command::DriveBy(-20.0),
+            Command::TurnTo(-67.5),
+            Command::DriveBy(-48.0),
+            Command::ToggleIntakePiston,
+            Command::Sleep(250),
+            Command::ToggleIntakePiston,
+            Command::Sleep(250),
+            Command::TurnTo(-45.0),
+            Command::DriveBy(36.0),
         ],
         vec![
             // path 2
@@ -297,20 +355,52 @@ async fn main(peripherals: Peripherals) {
             Command::DriveBy(32.0),
             Command::TurnTo(-50.0),
             Command::DriveBy(20.0),
+            Command::Sleep(750),
+            Command::ToggleClamp,
+            Command::ToggleIntake,
+            Command::Sleep(500),
             Command::TurnTo(0.0),
             Command::DriveBy(-18.0),
             Command::TurnTo(135.0),
             Command::DriveBy(-24.0),
         ],
+        vec![ // skills route
+            Command::Coordinate(Vec2 {
+                x: 10.0,
+                y: 144.0 / 2.0,
+            }),
+            Command::ToggleIntake,
+            Command::Sleep(1000),
+            Command::ToggleIntake,
+            Command::TurnTo(55.0),
+            Command::DriveBy(-27.5),
+            Command::ToggleClamp,
+            Command::TurnTo(0.0),
+            Command::ToggleIntake,
+            Command::DriveBy(-23.0),
+            Command::TurnTo(55.0),
+            Command::DriveBy(-40.0),
+            Command::TurnTo(-150.0),
+            Command::DriveBy(-24.0),
+            Command::TurnTo(180.0),
+            Command::DriveBy(-24.0),
+            Command::Sleep(500),
+            Command::DriveBy(-12.0),
+            Command::TurnTo(45.0),
+            Command::DriveBy(-14.0),
+            Command::TurnTo(-25.0),
+            Command::DriveBy(20.0),
+            Command::ToggleClamp,
+        ]
     ];
 
     let mut path_coords = Vec::new();
-    let mut updated_paths = Vec::new();
+    //let mut updated_paths = Vec::new();
 
     for path in auton_paths.iter() {
-        let (path_coord, updated_path) = command::command_to_coords(&path);
+        let path_coord = command::command_to_coords(&path);
         path_coords.push(path_coord);
-        updated_paths.push(updated_path);
+        //updated_paths.push(updated_path);
     }
 
     let app = AppWindow::new().unwrap();
@@ -361,14 +451,26 @@ async fn main(peripherals: Peripherals) {
             }
 
             fn invert_commands(commands: &[Command]) -> Vec<Command> {
-                commands
-                    .iter()
-                    .map(|command| match command {
-                        Command::Coordinate(coord) => Command::Coordinate(Vec2 { x: 144.0 - coord.x, y: coord.y }),
-                        Command::TurnTo(..) | Command::TurnBy(..) | Command::DriveBy(..) => command.clone(),
-                        _ => *command,
-                    })
-                    .collect()
+                //commands
+                //    .iter()
+                //    .map(|command| match command {
+                //        Command::Coordinate(coord) => Command::Coordinate(Vec2 { x: 144.0 - coord.x, y: coord.y }),
+                //        Command::TurnTo(..) | Command::TurnBy(..) | Command::DriveBy(..) => command.clone(),
+                //        _ => *command,
+                //    })
+                //    .collect()
+                let mut new_commands = Vec::new();
+
+                for command in commands.iter() {
+                    match command {
+                        Command::Coordinate(_) => (),
+                        Command::TurnTo(angle) => new_commands.push(Command::TurnTo(-angle)),
+                        Command::TurnBy(_) => panic!("no"),
+                        _ => new_commands.push(*command),
+                    }
+                }
+
+                new_commands
             }
 
             let index = autonomous.index as usize;
@@ -376,16 +478,20 @@ async fn main(peripherals: Peripherals) {
             let (coords, path, color) = if autonomous.color == "red" {
                 (
                     path_coords[index].clone(),
-                    updated_paths[index].clone(),
+                    //updated_paths[index].clone(),
+                    auton_paths[index].clone(),
                     [255u8, 0u8, 0u8, 255u8],
                 )
             } else {
                 (
                     invert_coords(&path_coords[index]),
-                    invert_commands(&updated_paths[index]),
+                    invert_commands(&auton_paths[index]),
                     [0u8, 0u8, 255u8, 255u8],
                 )
             };
+
+            println!("{:?}", path);
+
             let image = image_gen::coord_to_img(144, 144, color, &coords);
 
             {

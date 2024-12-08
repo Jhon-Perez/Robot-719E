@@ -1,5 +1,3 @@
-use vexide::prelude::Float;
-
 pub struct Pid {
     k_p: f64,
     k_i: f64,

@@ -11,12 +11,7 @@ export component AppWindow inherits Window {
     height: 240px;
 
     callback autonomous(Autonomous);
-    property<[{x: float, y: float}]> path_coordinates: [
-        { x: 10, y: 10 },
-        { x: 20, y: 10 },
-        { x: 20, y: 20 },
-        { x: 40, y: 40 },
-    ];
+    callback test();
 
     callback request-path();
     in-out property<image> path_image <=> path.source;
@@ -39,7 +34,9 @@ export component AppWindow inherits Window {
                     model: [
                         "Select Auton",
                         "Left",
+                        "Left (mess up)",
                         "Right",
+                        "Skills",
                     ];
                 }
 
@@ -61,6 +58,15 @@ export component AppWindow inherits Window {
                         side: mode_cb.current_value,
                     });
                     root.request-path();
+                }
+            }
+
+            Button {
+                text: "run";
+                height: 40px;
+                width: 225px;
+                clicked => {
+                    root.test();
                 }
             }
         }

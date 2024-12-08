@@ -9,6 +9,7 @@ use vexide::{
 
 use crate::vector::Vec2;
 
+#[derive(Copy, Clone)]
 pub struct Pose {
     pub position: Vec2,
     pub heading: f64,
@@ -89,7 +90,7 @@ impl Odometry {
 
         let delta_m = (mid_val - self.prev_mid_val) * RADIUS;
         let delta_l = (left_val - self.prev_left_val) * RADIUS;
-        let heading = self.imu_sensor.heading()?;
+        let heading = 360.0 - self.imu_sensor.heading()?;
 
         self.prev_mid_val = mid_val;
         self.prev_left_val = left_val;
@@ -133,6 +134,9 @@ impl Odometry {
 
 pub fn start(mut odom: Odometry) {
     spawn(async move {
+        _ = odom.x_rotation.reset_position();
+        _ = odom.y_rotation.reset_position();
+
         loop {
             if let Err(e) = odom.step().await {
                 match e {
