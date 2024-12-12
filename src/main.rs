@@ -3,6 +3,7 @@
 
 extern crate alloc;
 
+mod autonomous;
 mod command;
 mod image_gen;
 mod mappings;
@@ -13,7 +14,7 @@ mod pid;
 mod subsystems;
 mod vector;
 
-use alloc::{boxed::Box, rc::Rc, sync::Arc, vec, vec::Vec};
+use alloc::{boxed::Box, rc::Rc, sync::Arc, vec::Vec};
 use core::{borrow::BorrowMut, cell::RefCell, time::Duration};
 
 use command::Command;
@@ -48,6 +49,7 @@ struct Robot {
     controller: Controller,
 
     pub auton_path: Rc<RefCell<Vec<Command>>>,
+    pub test_auton: Rc<RefCell<bool>>,
     pub pose: Arc<Mutex<Pose>>,
 }
 
@@ -203,6 +205,10 @@ impl Compete for Robot {
                 _ = self.drivetrain.run().await;
             }
 
+            if self.test_auton.replace(false) {
+                self.autonomous().await;
+            }
+
             if mappings.clamp.is_now_pressed() {
                 _ = self.clamp.toggle();
             }
@@ -262,6 +268,7 @@ async fn main(peripherals: Peripherals) {
         clamp: AdiDigitalOut::with_initial_level(peripherals.adi_h, LogicLevel::Low),
         controller: peripherals.primary_controller,
         auton_path: Rc::new(RefCell::new(Vec::new())),
+        test_auton: Rc::new(RefCell::new(false)),
         pose: Arc::new(Mutex::new(Pose::new(0.0, 0.0, 0.0))),
     };
 
@@ -283,117 +290,15 @@ async fn main(peripherals: Peripherals) {
 
     initialize_slint_platform(peripherals.display);
 
-    // Pseudo numbers for what a path could look like
-    let auton_paths = [
-        vec![
-            Command::Coordinate(Vec2 { x: 0.0, y: 0.0 }),
-            Command::Coordinate(Vec2 { x: 0.0, y: 0.0 }),
-        ],
-        vec![ // path 1
-            Command::Coordinate(Vec2 {
-                x: 12.0,
-                y: 48.0,
-            }), // START THE PATH WITH ITS STARTING POINT
-            Command::Speed(0.8),
-            Command::DriveBy(32.0), // move forward to clamp goal
-            Command::Speed(1.0),
-            Command::Sleep(750),
-            Command::ToggleIntake,
-            Command::ToggleClamp,
-            Command::Sleep(500),
-            Command::DriveBy(6.0),
-            Command::TurnTo(90.0), // turn to face rings
-            Command::DriveBy(-26.0), // drive towards rings
-            Command::TurnTo(180.0), // turn 45 degrees right
-            Command::DriveBy(-14.0),
-            Command::TurnTo(-90.0),
-            Command::Speed(0.8),
-            Command::DriveBy(-22.5),
-            Command::ToggleIntake,
-        ],
-        vec![ // path 1 (mess up)
-            Command::Coordinate(Vec2 {
-                x: 12.0,
-                y: 48.0,
-            }), // START THE PATH WITH ITS STARTING POINT
-            Command::DriveBy(32.0), // move forward to clamp goal
-            Command::Sleep(750),
-            Command::ToggleIntake,
-            Command::ToggleClamp,
-            Command::Sleep(500),
-            Command::TurnTo(135.0), // turn to face rings
-            Command::ToggleIntakePiston,
-            Command::DriveBy(-28.0), // drive towards rings
-            Command::ToggleIntakeReverse, // INVERSE THIS
-            Command::ToggleIntakePiston,
-            Command::Sleep(1000),
-            Command::ToggleIntake,
-            Command::Sleep(1000),
-            Command::TurnTo(0.0),
-            Command::DriveBy(-20.0),
-            Command::TurnTo(-67.5),
-            Command::DriveBy(-48.0),
-            Command::ToggleIntakePiston,
-            Command::Sleep(250),
-            Command::ToggleIntakePiston,
-            Command::Sleep(250),
-            Command::TurnTo(-45.0),
-            Command::DriveBy(36.0),
-        ],
-        vec![
-            // path 2
-            Command::Coordinate(Vec2 {
-                x: 24.0, y: 132.0
-            }),
-            Command::DriveBy(32.0),
-            Command::TurnTo(-50.0),
-            Command::DriveBy(20.0),
-            Command::Sleep(750),
-            Command::ToggleClamp,
-            Command::ToggleIntake,
-            Command::Sleep(500),
-            Command::TurnTo(0.0),
-            Command::DriveBy(-18.0),
-            Command::TurnTo(135.0),
-            Command::DriveBy(-24.0),
-        ],
-        vec![ // skills route
-            Command::Coordinate(Vec2 {
-                x: 10.0,
-                y: 144.0 / 2.0,
-            }),
-            Command::ToggleIntake,
-            Command::Sleep(1000),
-            Command::ToggleIntake,
-            Command::TurnTo(55.0),
-            Command::DriveBy(-27.5),
-            Command::ToggleClamp,
-            Command::TurnTo(0.0),
-            Command::ToggleIntake,
-            Command::DriveBy(-23.0),
-            Command::TurnTo(55.0),
-            Command::DriveBy(-40.0),
-            Command::TurnTo(-150.0),
-            Command::DriveBy(-24.0),
-            Command::TurnTo(180.0),
-            Command::DriveBy(-24.0),
-            Command::Sleep(500),
-            Command::DriveBy(-12.0),
-            Command::TurnTo(45.0),
-            Command::DriveBy(-14.0),
-            Command::TurnTo(-25.0),
-            Command::DriveBy(20.0),
-            Command::ToggleClamp,
-        ]
-    ];
 
+    initialize_slint_platform(peripherals.display);
+
+    let auton_paths = autonomous::paths();
     let mut path_coords = Vec::new();
-    //let mut updated_paths = Vec::new();
 
     for path in auton_paths.iter() {
         let path_coord = command::command_to_coords(&path);
         path_coords.push(path_coord);
-        //updated_paths.push(updated_path);
     }
 
     let app = AppWindow::new().unwrap();
@@ -405,60 +310,23 @@ async fn main(peripherals: Peripherals) {
         move |autonomous| {
             println!("{:?}", autonomous);
 
-            // Each robot starts across from each other, so the oppisite side can
-            // be replicated by flipping the x-axis. Right now this implementation
-            // is ugly with clone, will try to find a cleaner solution
-            //let color;
-            //let index = autonomous.index as usize;
-            //let (coords, path) = if autonomous.color == "red" {
-            //    color = [255u8, 0u8, 0u8, 255u8];
-            //    (path_coords[index].clone(), updated_paths[index].clone())
-            //} else {
-            //    let mut coords = Vec::new();
-            //    for coord in &path_coords[index] {
-            //        coords.push(Vec2 {
-            //            x: 144.0 - coord.x,
-            //            y: coord.y,
-            //        });
-            //    }
-            //
-            //    let mut path = Vec::new();
-            //    for coord in &updated_paths[index] {
-            //        match coord {
-            //            Command::Coordinate(coord) => {
-            //                path.push(Command::Coordinate(Vec2 {
-            //                    x: 144.0 - coord.x,
-            //                    y: coord.y,
-            //                }));
-            //            }
-            //            Command::TurnTo(..) | Command::TurnBy(..) | Command::DriveBy(..) => (),
-            //            _ => path.push(*coord),
-            //        }
-            //    }
-            //
-            //    color = [0u8, 0u8, 255u8, 255u8];
-            //    (coords, path)
-            //};
             fn invert_coords(coords: &[Vec2]) -> Vec<Vec2> {
-                coords.iter().map(|coord| Vec2 { x: 144.0 - coord.x, y: coord.y }).collect()
+                coords
+                    .iter()
+                    .map(|coord| Vec2 {
+                        x: 144.0 - coord.x,
+                        y: coord.y,
+                    })
+                    .collect()
             }
 
             fn invert_commands(commands: &[Command]) -> Vec<Command> {
-                //commands
-                //    .iter()
-                //    .map(|command| match command {
-                //        Command::Coordinate(coord) => Command::Coordinate(Vec2 { x: 144.0 - coord.x, y: coord.y }),
-                //        Command::TurnTo(..) | Command::TurnBy(..) | Command::DriveBy(..) => command.clone(),
-                //        _ => *command,
-                //    })
-                //    .collect()
                 let mut new_commands = Vec::new();
 
                 for command in commands.iter() {
                     match command {
-                        Command::Coordinate(_) => (),
                         Command::TurnTo(angle) => new_commands.push(Command::TurnTo(-angle)),
-                        Command::TurnBy(_) => panic!("no"),
+                        Command::TurnBy(_) | Command::Coordinate(_) => (),
                         _ => new_commands.push(*command),
                     }
                 }
@@ -471,7 +339,6 @@ async fn main(peripherals: Peripherals) {
             let (coords, path, color) = if autonomous.color == "red" {
                 (
                     path_coords[index].clone(),
-                    //updated_paths[index].clone(),
                     auton_paths[index].clone(),
                     [255u8, 0u8, 0u8, 255u8],
                 )
@@ -494,6 +361,15 @@ async fn main(peripherals: Peripherals) {
 
             let ui = ui_handler.unwrap();
             ui.set_path_image(image);
+        }
+    });
+
+    app.on_test({
+        let mut test_auton = robot.test_auton.clone();
+
+        move || {
+            let test = test_auton.borrow_mut();
+            test.replace(true);
         }
     });
 
