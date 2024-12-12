@@ -23,7 +23,7 @@ pub enum TargetType {
     None,
 }
 
-pub struct Chassis {
+pub struct Drivetrain {
     left_motors: Box<[Motor]>,
     right_motors: Box<[Motor]>,
 
@@ -37,7 +37,7 @@ pub struct Chassis {
     pub imu: InertialSensor,
 }
 
-impl Chassis {
+impl Drivetrain {
     pub fn new(
         left_motors: Box<[Motor]>,
         right_motors: Box<[Motor]>,

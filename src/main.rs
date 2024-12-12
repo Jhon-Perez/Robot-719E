@@ -3,7 +3,6 @@
 
 extern crate alloc;
 
-mod chassis;
 mod command;
 mod image_gen;
 mod mappings;
@@ -17,13 +16,16 @@ mod vector;
 use alloc::{boxed::Box, rc::Rc, sync::Arc, vec, vec::Vec};
 use core::{borrow::BorrowMut, cell::RefCell, time::Duration};
 
-use chassis::{Chassis, TargetType};
 use command::Command;
 use mappings::{ControllerMappings, DriveMode};
 use odometry::{Odometry, Pose};
 use pid::Pid;
 use slint::ComponentHandle;
-use subsystems::{intake::Intake, lady_brown::LadyBrown};
+use subsystems::{
+    drivetrain::{Drivetrain, TargetType},
+    intake::Intake,
+    lady_brown::LadyBrown,
+};
 use vector::Vec2;
 use vexide::{
     core::{sync::Mutex, time::Instant},
@@ -35,7 +37,7 @@ use vexide::{
 slint::include_modules!();
 
 struct Robot {
-    chassis: chassis::Chassis,
+    drivetrain: Drivetrain,
 
     intake: Intake,
     intake_lift: AdiDigitalOut,
@@ -62,20 +64,20 @@ impl Compete for Robot {
 
         //_ = self.intake_lift.toggle();
 
-        for command in self.auton_path.replace(vec![]) {
+        for command in self.auton_path.borrow().iter() {
             match command {
                 // no odom so coordinate won't be used
                 Command::Coordinate(_coord) => {}
                 Command::DriveBy(distance) => {
-                    self.chassis.set_drive_target(TargetType::Distance(distance));
-                    _ = self.chassis.run().await;
+                    self.drivetrain.set_drive_target(TargetType::Distance(*distance));
+                    _ = self.drivetrain.run().await;
                 }
                 Command::TurnTo(angle) => {
-                    self.chassis.set_turn_target(TargetType::Distance(angle));
-                    _ = self.chassis.run().await;
+                    self.drivetrain.set_turn_target(TargetType::Distance(*angle));
+                    _ = self.drivetrain.run().await;
                 }
                 Command::Speed(speed) => {
-                    self.chassis.set_speed(speed);
+                    self.drivetrain.set_speed(*speed);
                 }
                 Command::ToggleIntake => {
                     self.intake.toggle(1.0);
@@ -94,7 +96,7 @@ impl Compete for Robot {
                     next_data.next();
                 }
                 Command::Sleep(delay) => {
-                    sleep(Duration::from_millis(delay)).await;
+                    sleep(Duration::from_millis(*delay)).await;
                 }
                 _ => (),
             };
@@ -172,8 +174,8 @@ impl Compete for Robot {
                 turn_pid_test: state.button_right,
             };
 
-            let power = self.chassis.differential_drive(&mappings);
-            self.chassis.set_voltage(power);
+            let power = self.drivetrain.differential_drive(&mappings);
+            self.drivetrain.set_voltage(power);
 
             if mappings.intake.is_pressed() {
                 self.intake.set_voltage(Motor::V5_MAX_VOLTAGE);
@@ -194,11 +196,11 @@ impl Compete for Robot {
             }
 
             if mappings.turn_pid_test.is_pressed() {
-                self.chassis.set_turn_target(TargetType::Distance(0.0));
-                self.chassis.run().await.ok();
+                self.drivetrain.set_turn_target(TargetType::Distance(0.0));
+                _ = self.drivetrain.run().await;
             } else if mappings.drive_pid_test.is_pressed() {
-                self.chassis.set_drive_target(TargetType::Distance(10.0));
-                self.chassis.run().await.ok();
+                self.drivetrain.set_drive_target(TargetType::Distance(10.0));
+                _ = self.drivetrain.run().await;
             }
 
             if mappings.clamp.is_now_pressed() {
@@ -218,33 +220,24 @@ impl Compete for Robot {
 async fn main(peripherals: Peripherals) {
     println!("Program started.");
 
-    let left_motors = Box::new([
-        Motor::new(peripherals.port_15, Gearset::Blue, Direction::Reverse),
-        Motor::new(peripherals.port_12, Gearset::Blue, Direction::Forward),
-        Motor::new(peripherals.port_19, Gearset::Blue, Direction::Reverse),
-    ]);
-    let right_motors = Box::new([
-        Motor::new(peripherals.port_13, Gearset::Blue, Direction::Forward),
-        Motor::new(peripherals.port_16, Gearset::Blue, Direction::Reverse),
-        Motor::new(peripherals.port_11, Gearset::Blue, Direction::Forward),
-    ]);
-
-    let mut imu = InertialSensor::new(peripherals.port_5);
-    match imu.calibrate().await {
-        Ok(_) => println!("Inertial Sensor Sucessfully Calibrated"),
-        Err(_) => println!("Inertial Error"),
-    }
-
-    let chassis = Chassis::new(
-        left_motors,
-        right_motors,
-        Pid::new(0.125, 0.0, 0.0, 0.0),   // linear
+    let drivetrain = Drivetrain::new(
+        Box::new([
+            Motor::new(peripherals.port_15, Gearset::Blue, Direction::Reverse),
+            Motor::new(peripherals.port_12, Gearset::Blue, Direction::Forward),
+            Motor::new(peripherals.port_19, Gearset::Blue, Direction::Reverse),
+        ]),
+        Box::new([
+            Motor::new(peripherals.port_13, Gearset::Blue, Direction::Forward),
+            Motor::new(peripherals.port_16, Gearset::Blue, Direction::Reverse),
+            Motor::new(peripherals.port_11, Gearset::Blue, Direction::Forward),
+        ]),
+        Pid::new(0.125, 0.0, 0.0, 0.0),    // linear
         Pid::new(0.125, 0.01, 1.25, 0.25), // angular
-        imu,
+        InertialSensor::new(peripherals.port_5),
     );
 
-    let robot = Robot {
-        chassis,
+    let mut robot = Robot {
+        drivetrain,
         intake: Intake::new((
             Motor::new(
                 peripherals.port_2,
@@ -510,5 +503,9 @@ async fn main(peripherals: Peripherals) {
     })
     .detach();
 
+    match robot.drivetrain.imu.calibrate().await {
+        Ok(_) => println!("Inertial Sensor Sucessfully Calibrated"),
+        Err(_) => println!("Inertial Error"),
+    }
     robot.compete().await;
 }
