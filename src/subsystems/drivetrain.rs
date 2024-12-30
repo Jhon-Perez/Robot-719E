@@ -201,3 +201,38 @@ fn get_acceleration(power: f64, acceleration: i32) -> f64 {
             power
         }
 }
+
+pub fn differential_drive(mappings: &ControllerMappings) -> (f64, f64) {
+    let mut power_val = 0.0;
+    let mut turn_val = 0.0;
+    let mut left_val = 0.0;
+    let mut right_val = 0.0;
+
+    match mappings.drive_mode {
+        DriveMode::Arcade { arcade } => {
+            power_val = arcade.y();
+            turn_val = arcade.x();
+        }
+        DriveMode::SplitArcade { power, turn } => {
+            power_val = power.y();
+            turn_val = turn.x();
+        }
+        DriveMode::Tank { left, right } => {
+            left_val = left.y();
+            right_val = right.y();
+        }
+    }
+
+    match mappings.drive_mode {
+        DriveMode::Tank { .. } => (),
+        _ => {
+            left_val = get_acceleration(power_val + turn_val, 1);
+            right_val = get_acceleration(power_val - turn_val, 1);
+        }
+    }
+
+    (
+        left_val * Motor::V5_MAX_VOLTAGE,
+        right_val * Motor::V5_MAX_VOLTAGE,
+    )
+}
