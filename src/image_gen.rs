@@ -1,5 +1,8 @@
+use alloc::vec::Vec;
+
 use slint::{Image, Rgba8Pixel, SharedPixelBuffer};
-use crate::vector::Vec2;
+
+use crate::{command::Command, vector::Vec2};
 
 //pub fn path_to_svg(path: &[Vec2]) -> String {
 //    // 144 is the size of the field and we are starting on the halfway across the field
@@ -59,14 +62,7 @@ fn draw_line(
     }
 }
 
-fn set_pixel(
-    x: u32,
-    y: u32,
-    buffer: &mut [u8],
-    width: u32,
-    height: u32,
-    color: [u8; 4],
-) {
+fn set_pixel(x: u32, y: u32, buffer: &mut [u8], width: u32, height: u32, color: [u8; 4]) {
     if x >= width || y >= height {
         return;
     }
@@ -74,14 +70,28 @@ fn set_pixel(
     buffer[index..index + 4].copy_from_slice(&color);
 }
 
-pub fn coord_to_img(width: u32, height: u32, color: [u8; 4], coords: &[Vec2]) -> Image {
+pub fn coord_to_img(width: u32, height: u32, color: [u8; 4], coords: &[Command]) -> Image {
     let mut pixel_buffer = SharedPixelBuffer::<Rgba8Pixel>::new(width, height);
 
     let buffer = pixel_buffer.make_mut_bytes();
 
+    let coords: Vec<Command> = coords
+        .iter()
+        .filter(|&command| matches!(command, Command::Coordinate(_)))
+        .cloned()
+        .collect();
+    
     for i in 1..coords.len() {
-        let (x0, y0) = coords[i - 1].get_i32();
-        let (x1, y1) = coords[i].get_i32();
+        let (x0, y0) = if let Command::Coordinate(coord) = coords[i - 1] {
+            coord.get_i32()
+        } else {
+            continue;
+        };
+        let (x1, y1) = if let Command::Coordinate(coord) = coords[i] {
+            coord.get_i32()
+        } else {
+            continue;
+        };
 
         draw_line(x0, y0, x1, y1, buffer, width, height, color);
     }

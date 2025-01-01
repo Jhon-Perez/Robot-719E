@@ -17,46 +17,38 @@ pub enum Command {
     ToggleClamp,
 }
 
-pub fn command_to_coords(path: &[Command]) -> Vec<Vec2> {
-    let coord = match path[0] {
-        Command::Coordinate(coordinate) => coordinate,
-        _ => panic!("COORDINATE IS THE ONLY SUPPORTED FEATURE AS OF NOW"),
+pub fn command_to_coords(path: &[Command]) -> Vec<Command> {
+    let (coord, path) = if let Command::Coordinate(coord) = path[0] {
+        (coord, &path[1..])
+    } else {
+        (Vec2::new(0.0, 0.0), path)
     };
 
     let mut pose = Pose::new(coord.x, coord.y, 0.0);
-    let mut coords = Vec::new();
+    let mut new_path = Vec::new();
 
-    coords.push(pose.position);
+    new_path.push(Command::Coordinate(pose.position));
 
-    for &command in &path[1..] {
-        let coord = match command {
-            Command::Coordinate(coordinate) => Some(coordinate),
+    for &command in path {
+        match command {
             Command::DriveBy(distance) => {
                 let traveled = Vec2::from_polar(distance, pose.heading.to_radians());
                 pose.position += traveled;
 
-                Some(pose.position)
+                new_path.push(Command::Coordinate(pose.position))
             }
             Command::TurnBy(angle) => {
                 pose.heading += angle;
                 pose.heading %= 360.0;
-
-                None
             }
             Command::TurnTo(heading) => {
                 pose.heading = heading;
                 pose.heading %= 360.0;
-
-                None
             }
-            _ => None,
+            _ => new_path.push(command),
         };
-
-        if let Some(coordinate) = coord {
-            coords.push(coordinate);
-        }
     }
 
-    coords
+    new_path
 }
 

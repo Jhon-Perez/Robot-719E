@@ -104,7 +104,7 @@ impl Compete for Robot {
             // turn the path into coordinates rather than these distances to match the new pid
             match command {
                 // no odom so coordinate won't be used
-                Command::Coordinate(_coord) => _ = seeking.move_to_point(dt, (24.0, 24.0)),
+                Command::Coordinate(coord) => _ = seeking.move_to_point(dt, coord.get()),
                 // figure out how to control speed
                 Command::Speed(_speed) => {
                     //self.drivetrain.set_speed(*speed);
@@ -128,7 +128,7 @@ impl Compete for Robot {
                 Command::Sleep(delay) => {
                     sleep(Duration::from_millis(*delay)).await;
                 }
-                _ => (),
+                _ => unreachable!(),
             };
         }
     }
@@ -264,12 +264,10 @@ async fn main(peripherals: Peripherals) {
 
     initialize_slint_platform(peripherals.display);
 
-    let auton_paths = autonomous::paths();
-    let mut path_coords = Vec::new();
+    let mut auton_paths = autonomous::paths();
 
-    for path in auton_paths.iter() {
-        let path_coord = command::command_to_coords(&path);
-        path_coords.push(path_coord);
+    for i in 0..auton_paths.len() {
+        auton_paths[i] = command::command_to_coords(&auton_paths[i]);
     }
 
     let app = AppWindow::new().unwrap();
@@ -281,53 +279,41 @@ async fn main(peripherals: Peripherals) {
         move |autonomous| {
             println!("{:?}", autonomous);
 
-            fn invert_coords(coords: &[Vec2]) -> Vec<Vec2> {
-                coords
+            fn invert_coords(commands: &[Command]) -> Vec<Command> {
+                commands
                     .iter()
-                    .map(|coord| Vec2 {
-                        x: 144.0 - coord.x,
-                        y: coord.y,
+                    .map(|command| {
+                        if let Command::Coordinate(coord) = command {
+                            Command::Coordinate(vector::Vec2 {
+                                x: 144.0 - coord.x,
+                                y: coord.y,
+                            })
+                        } else {
+                            *command
+                        }
                     })
                     .collect()
             }
 
-            fn invert_commands(commands: &[Command]) -> Vec<Command> {
-                let mut new_commands = Vec::new();
-
-                for command in commands.iter() {
-                    match command {
-                        Command::TurnTo(angle) => new_commands.push(Command::TurnTo(-angle)),
-                        Command::TurnBy(_) | Command::Coordinate(_) => (),
-                        _ => new_commands.push(*command),
-                    }
-                }
-
-                new_commands
-            }
-
             let index = autonomous.index as usize;
 
-            let (coords, path, color) = if autonomous.color == "red" {
+            let (commands, color) = if autonomous.color == "red" {
                 (
-                    path_coords[index].clone(),
                     auton_paths[index].clone(),
                     [255u8, 0u8, 0u8, 255u8],
                 )
             } else {
                 (
-                    invert_coords(&path_coords[index]),
-                    invert_commands(&auton_paths[index]),
+                    invert_coords(&auton_paths[index]),
                     [0u8, 0u8, 255u8, 255u8],
                 )
             };
 
-            println!("{:?}", path);
-
-            let image = image_gen::coord_to_img(144, 144, color, &coords);
+            let image = image_gen::coord_to_img(144, 144, color, &commands);
 
             {
                 let curr_path = auton_path.borrow_mut();
-                curr_path.replace(path);
+                curr_path.replace(commands);
             }
 
             let ui = ui_handler.unwrap();
