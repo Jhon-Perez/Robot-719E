@@ -8,9 +8,8 @@ mod command;
 mod image_gen;
 mod mappings;
 mod odometry;
-// mod path;
 mod pid;
-// mod pure_pursuit;
+mod pose;
 mod subsystems;
 mod vector;
 
@@ -101,10 +100,8 @@ impl Compete for Robot {
         };
 
         for command in self.auton_path.borrow().iter() {
-            // turn the path into coordinates rather than these distances to match the new pid
             match command {
-                // no odom so coordinate won't be used
-                Command::Coordinate(coord) => _ = seeking.move_to_point(dt, coord.get()),
+                Command::Coordinate(coord) => _ = seeking.move_to_point(dt, *coord),
                 // figure out how to control speed
                 Command::Speed(_speed) => {
                     //self.drivetrain.set_speed(*speed);
@@ -284,9 +281,9 @@ async fn main(peripherals: Peripherals) {
                     .iter()
                     .map(|command| {
                         if let Command::Coordinate(coord) = command {
-                            Command::Coordinate(vector::Vec2 {
-                                x: 144.0 - coord.x,
-                                y: coord.y,
+                            Command::Coordinate(Vec2 {
+                                x: 144.0 - coord.x(),
+                                y: coord.y(),
                             })
                         } else {
                             *command

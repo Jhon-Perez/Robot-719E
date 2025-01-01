@@ -1,10 +1,11 @@
 use alloc::vec::Vec;
 
-use crate::{odometry::Pose, vector::Vec2};
+use crate::pose::Pose;
+use evian::math::Vec2;
 
 #[derive(Clone, Copy, Debug)]
 pub enum Command {
-    Coordinate(Vec2),
+    Coordinate(Vec2<f64>),
     DriveBy(f64),
     TurnBy(f64),
     TurnTo(f64),
@@ -24,7 +25,7 @@ pub fn command_to_coords(path: &[Command]) -> Vec<Command> {
         (Vec2::new(0.0, 0.0), path)
     };
 
-    let mut pose = Pose::new(coord.x, coord.y, 0.0);
+    let mut pose = Pose::new(coord, 0.0);
     let mut new_path = Vec::new();
 
     new_path.push(Command::Coordinate(pose.position));

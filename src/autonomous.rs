@@ -1,6 +1,7 @@
 use alloc::{vec, vec::Vec};
 
-use crate::{command::Command, vector::Vec2};
+use crate::command::Command;
+use evian::math::Vec2;
 
 // change to choosing path rather than returning all
 pub fn paths() -> [Vec<Command>; 5] {

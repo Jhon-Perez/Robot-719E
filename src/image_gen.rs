@@ -2,7 +2,7 @@ use alloc::vec::Vec;
 
 use slint::{Image, Rgba8Pixel, SharedPixelBuffer};
 
-use crate::{command::Command, vector::Vec2};
+use crate::command::Command;
 
 //pub fn path_to_svg(path: &[Vec2]) -> String {
 //    // 144 is the size of the field and we are starting on the halfway across the field
@@ -83,12 +83,12 @@ pub fn coord_to_img(width: u32, height: u32, color: [u8; 4], coords: &[Command])
     
     for i in 1..coords.len() {
         let (x0, y0) = if let Command::Coordinate(coord) = coords[i - 1] {
-            coord.get_i32()
+            (coord.x() as i32, coord.y() as i32)
         } else {
             continue;
         };
         let (x1, y1) = if let Command::Coordinate(coord) = coords[i] {
-            coord.get_i32()
+            (coord.x() as i32, coord.y() as i32)
         } else {
             continue;
         };
