@@ -3,9 +3,10 @@ use alloc::vec::Vec;
 use crate::pose::Pose;
 use evian::math::Vec2;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy)]
 pub enum Command {
     Coordinate(Vec2<f64>),
+    CubicBezier(Vec2<f64>, Vec2<f64>, Vec2<f64>, Vec2<f64>),
     DriveBy(f64),
     TurnBy(f64),
     TurnTo(f64),
@@ -19,10 +20,10 @@ pub enum Command {
 }
 
 pub fn command_to_coords(path: &[Command]) -> Vec<Command> {
-    let (coord, path) = if let Command::Coordinate(coord) = path[0] {
-        (coord, &path[1..])
-    } else {
-        (Vec2::new(0.0, 0.0), path)
+    let (coord, path) = match path[0] {
+        Command::Coordinate(coord) => (coord, &path[1..]),
+        Command::CubicBezier(p0, ..) => (p0, path),
+        _ => (Vec2::new(0.0, 0.0), path),
     };
 
     let mut pose = Pose::new(coord, 0.0);

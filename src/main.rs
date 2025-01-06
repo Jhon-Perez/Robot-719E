@@ -7,11 +7,9 @@ mod autonomous;
 mod command;
 mod image_gen;
 mod mappings;
-mod odometry;
 mod pid;
 mod pose;
 mod subsystems;
-mod vector;
 
 use alloc::{rc::Rc, sync::Arc, vec::Vec};
 use core::{borrow::BorrowMut, cell::RefCell, time::Duration};
@@ -83,12 +81,7 @@ impl Compete for Robot {
             external_gearing: GEARING,
         };
 
-        let curve = CubicBezier::new((0.0, 0.0), (18.0, 33.0), (50.0, -29.0), (46.0, 8.0));
-        let trajectory = Trajectory::generate(curve, 0.1, constraints);
-
         let dt = &mut self.drivetrain;
-
-        ramsete.follow(dt, trajectory).await;
 
         let mut seeking = Seeking {
             distance_controller: Pid::new(0.125, 0.0, 0.0, None),
@@ -99,9 +92,17 @@ impl Compete for Robot {
                 .timeout(Duration::from_millis(5000)),
         };
 
-        for command in self.auton_path.borrow().iter() {
+        for &command in self.auton_path.borrow()[1..].iter() {
             match command {
-                Command::Coordinate(coord) => _ = seeking.move_to_point(dt, *coord),
+                Command::Coordinate(coord) => {
+                    _ = seeking.move_to_point(dt, coord);
+                }
+                Command::CubicBezier(p0, p1, p2, p3) => {
+                    let curve = CubicBezier::new(p0, p1, p2, p3);
+                    let trajectory = Trajectory::generate(curve, 0.1, constraints);
+
+                    ramsete.follow(dt, trajectory).await;
+                }
                 // figure out how to control speed
                 Command::Speed(_speed) => {
                     //self.drivetrain.set_speed(*speed);
@@ -123,7 +124,7 @@ impl Compete for Robot {
                     next_data.next();
                 }
                 Command::Sleep(delay) => {
-                    sleep(Duration::from_millis(*delay)).await;
+                    sleep(Duration::from_millis(delay)).await;
                 }
                 _ => unreachable!(),
             };
@@ -295,15 +296,9 @@ async fn main(peripherals: Peripherals) {
             let index = autonomous.index as usize;
 
             let (commands, color) = if autonomous.color == "red" {
-                (
-                    auton_paths[index].clone(),
-                    [255u8, 0u8, 0u8, 255u8],
-                )
+                (auton_paths[index].clone(), [255u8, 0u8, 0u8, 255u8])
             } else {
-                (
-                    invert_coords(&auton_paths[index]),
-                    [0u8, 0u8, 255u8, 255u8],
-                )
+                (invert_coords(&auton_paths[index]), [0u8, 0u8, 255u8, 255u8])
             };
 
             let image = image_gen::coord_to_img(144, 144, color, &commands);

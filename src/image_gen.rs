@@ -1,36 +1,37 @@
 use alloc::vec::Vec;
 
+use evian::math::Vec2;
 use slint::{Image, Rgba8Pixel, SharedPixelBuffer};
+use vexide::prelude::Float;
 
 use crate::command::Command;
 
-//pub fn path_to_svg(path: &[Vec2]) -> String {
-//    // 144 is the size of the field and we are starting on the halfway across the field
-//    let mut curr_path = String::new();
-//
-//    curr_path.push_str(&format!("M {} {}", path[0].x, path[0].y));
-//
-//    for command in &path[1..] {
-//        let svg = format!(" L {} {}", command.x, command.y);
-//        curr_path.push_str(&svg);
-//    }
-//
-//    curr_path
-//}
+fn draw_bezier(
+    p0: Vec2<f64>,
+    p1: Vec2<f64>,
+    p2: Vec2<f64>,
+    p3: Vec2<f64>,
+    steps: usize,
+) -> Vec<(i32, i32)> {
+    let mut points = Vec::with_capacity(steps);
 
-// pub fn svg_to_image(commands: &str, width: u32, height: u32) -> Image {
-//     let svg_data = format!(
-//         r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}">
-//             <path d="{commands}" stroke="red" fill="none" stroke-width="2"/>
-//         </svg>"#,
-//         commands = commands,
-//         width = width,
-//         height = height
-//     );
-//     let buffer = svg_data.as_bytes();
+    for i in 0..=steps {
+        let t = i as f64 / steps as f64;
 
-//     Image::load_from_svg_data(buffer).unwrap()
-// }
+        let one_minus_t = 1.0 - t;
+        let b0 = one_minus_t.powi(3);
+        let b1 = 3.0 * one_minus_t.powi(2) * t;
+        let b2 = 3.0 * one_minus_t * t.powi(2);
+        let b3 = t.powi(3);
+
+        let x = b0 * p0.x() + b1 * p1.x() + b2 * p2.x() + b3 * p3.x();
+        let y = b0 * p0.y() + b1 * p1.y() + b2 * p2.y() + b3 * p3.y();
+
+        points.push((x as i32, y as i32));
+    }
+
+    points
+}
 
 fn draw_line(
     mut x0: i32,
@@ -77,20 +78,31 @@ pub fn coord_to_img(width: u32, height: u32, color: [u8; 4], coords: &[Command])
 
     let coords: Vec<Command> = coords
         .iter()
-        .filter(|&command| matches!(command, Command::Coordinate(_)))
+        .filter(|command| matches!(command, Command::Coordinate(_) | Command::CubicBezier(..)))
         .cloned()
         .collect();
-    
+
     for i in 1..coords.len() {
-        let (x0, y0) = if let Command::Coordinate(coord) = coords[i - 1] {
-            (coord.x() as i32, coord.y() as i32)
-        } else {
-            continue;
+        let (x0, y0) = match coords[i - 1] {
+            Command::Coordinate(coord) => (coord.x() as i32, coord.y() as i32),
+            Command::CubicBezier(.., p3) => (p3.x() as i32, p3.y() as i32),
+            _ => unreachable!(),
         };
-        let (x1, y1) = if let Command::Coordinate(coord) = coords[i] {
-            (coord.x() as i32, coord.y() as i32)
-        } else {
-            continue;
+
+        let (x1, y1) = match coords[i] {
+            Command::Coordinate(coord) => (coord.x() as i32, coord.y() as i32),
+            Command::CubicBezier(p0, p1, p2, p3) => {
+                let points = draw_bezier(p0, p1, p2, p3, 100);
+
+                for j in 1..points.len() {
+                    let (x0, y0) = points[j - 1];
+                    let (x1, y1) = points[j];
+                    draw_line(x0, y0, x1, y1, buffer, width, height, color);
+                }
+
+                (p0.x() as i32, p0.y() as i32)
+            }
+            _ => unreachable!(),
         };
 
         draw_line(x0, y0, x1, y1, buffer, width, height, color);
