@@ -1,0 +1,15 @@
+// path 2
+Coordinate (24.0,132.0)
+ToggleIntakePiston
+Drive 35.0
+Turn -42.5
+Drive 17.5
+Sleep 750
+ToggleClamp
+ToggleIntake
+Sleep 500
+Turn -9.0
+Drive -18.0
+Sleep 500
+//Turn -135.0
+//Drive -24.0

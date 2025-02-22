@@ -22,11 +22,7 @@ pub fn differential_drive(mappings: &ControllerMappings) -> (f64, f64) {
     let mut right_val = 0.0;
 
     match mappings.drive_mode {
-        DriveMode::Arcade { arcade } => {
-            power_val = arcade.y();
-            turn_val = arcade.x();
-        }
-        DriveMode::SplitArcade { power, turn } => {
+        DriveMode::Arcade { power, turn } => {
             power_val = power.y();
             turn_val = turn.x();
         }

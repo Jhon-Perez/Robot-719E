@@ -1,0 +1,24 @@
+// temp skills route
+Coordinate (20.0,96.0)
+ToggleIntakePiston
+Drive 6.5
+Sleep 650
+ToggleIntake
+ToggleClamp
+Sleep 750
+Turn 180.0
+Speed 0.5
+Drive 28.0
+Sleep 250
+Turn 90.0
+Drive -24.0
+Sleep 250
+Turn 0.0
+Drive -34.0
+Turn -88.0
+Sleep 250
+Drive 20.0
+Sleep 500
+ToggleClamp
+Sleep 500
+Drive -20.0
