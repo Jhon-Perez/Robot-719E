@@ -6,16 +6,19 @@ use vexide::prelude::Float;
 
 use crate::{autonomous::command::Command, backend::Color};
 
+// Drawing platform for different lines and curves for the autonomous selector
 pub struct Canvas {
     width: u32,
     height: u32,
-    buffer: Vec<u8>,
-    color: [u8; 4],
+    buffer: Vec<u8>, // Stores pixel data in RGBA format
+    color: [u8; 4],  // Current drawing color
 }
 
 impl Canvas {
+    /// Create a new canvas with the specified width, height, and color
     pub fn new(width: u32, height: u32, color: Color) -> Self {
-        let buffer = vec![0; (width * height * 4) as usize]; // RGBA format
+        // RGBA format, initialized to transparent black
+        let buffer = vec![0; (width * height * 4) as usize];
         Self {
             width,
             height,
@@ -27,6 +30,8 @@ impl Canvas {
         }
     }
 
+
+    /// Set a pixel at (x, y) to the current color
     fn set_pixel(&mut self, x: u32, y: u32) {
         if x >= self.width || y >= self.height {
             return;
@@ -35,6 +40,7 @@ impl Canvas {
         self.buffer[index..index + 4].copy_from_slice(&self.color);
     }
 
+    /// Draw a line using Bresenham's algorithm
     fn draw_line(&mut self, x0: i32, y0: i32, x1: i32, y1: i32) {
         let dx = (x1 - x0).abs();
         let dy = -(y1 - y0).abs();
@@ -57,6 +63,7 @@ impl Canvas {
         }
     }
 
+    /// Draw a cubic Bézier curve using de Casteljau's algorithm with `steps` subdivisions
     fn draw_bezier(
         &mut self,
         p0: Vec2<f64>,
@@ -83,6 +90,7 @@ impl Canvas {
         }
     }
 
+    /// Draws coordinates and Bézier curves based on the given list of commands
     pub fn draw_commands(&mut self, commands: &[Command]) {
         let mut prev: Option<(i32, i32)> = None;
 
@@ -99,11 +107,12 @@ impl Canvas {
                     self.draw_bezier(*p0, *p1, *p2, *p3, 100);
                     prev = Some((p3.x() as i32, p3.y() as i32));
                 }
-                _ => (),
+                _ => (), // Ignore other commands
             }
         }
     }
 
+    /// Converts the pixel buffer to an image format that Slint can display
     pub fn to_image(&self) -> Image {
         let mut pixel_buffer = SharedPixelBuffer::new(self.width, self.height);
 

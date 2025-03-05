@@ -1,5 +1,6 @@
 use vexide::devices::controller::{ButtonState, JoystickState};
 
+// Different drive mods that the driver can switch to
 pub enum DriveMode {
     Arcade {
         power: JoystickState,
@@ -12,6 +13,7 @@ pub enum DriveMode {
 }
 
 // TODO: Create ui to allow user to change mappings
+// Map all the controller keybinds with their respective subsystem
 pub struct ControllerMappings {
     pub drive_mode: DriveMode,
 
@@ -22,7 +24,4 @@ pub struct ControllerMappings {
     pub lady_brown: ButtonState,
 
     pub clamp: ButtonState,
-
-    pub drive_pid_test: ButtonState,
-    pub turn_pid_test: ButtonState,
 }

@@ -1,9 +1,10 @@
 use alloc::vec::Vec;
+
 use evian::math::Vec2;
 
 use super::command::Command;
 
-
+/// Parses a `Vec2<f64>` from a string formatted as "(x,y)"
 fn vec2(arg: &str) -> Result<Vec2<f64>, &'static str> {
     let arg = arg.trim();
     if !arg.starts_with('(') || !arg.ends_with(')') {

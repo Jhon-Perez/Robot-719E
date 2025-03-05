@@ -1,12 +1,15 @@
 use alloc::vec::Vec;
 
 use evian::prelude::Vec2;
+
 use crate::autonomous::command::Command;
 
+// Swap coordinates to match the blue side of the field
 pub fn reverse_coord(coord: &Vec2<f64>) -> Vec2<f64> {
     Vec2::new(144.0 - coord.x(), coord.y())
 }
 
+// Go through the list of commands provided and swap coordinates and angles
 pub fn invert_coords(commands: &[Command]) -> Vec<Command> {
     commands
         .iter()
@@ -19,10 +22,7 @@ pub fn invert_coords(commands: &[Command]) -> Vec<Command> {
                 reverse_coord(p2),
                 reverse_coord(p3),
             ),
-            Command::Pose(coord, angle) => Command::Pose(
-                reverse_coord(coord),
-                *angle,
-            ),
+            Command::Pose(coord, angle) => Command::Pose(reverse_coord(coord), *angle),
             _ => *command,
         })
         .collect()

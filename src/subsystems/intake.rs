@@ -34,8 +34,4 @@ impl Intake {
             self.brake(BrakeMode::Coast);
         }
     }
-
-    //pub fn is_jammed(&self) -> Result<bool, MotorError> {
-    //   Ok(self.motor.voltage()? == Motor::V5_MAX_VOLTAGE && self.motor.velocity()? > 10.0)
-    //}
 }
