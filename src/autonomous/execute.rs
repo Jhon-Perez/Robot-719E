@@ -1,14 +1,39 @@
 use core::time::Duration;
 
 use evian::{
+    control::{AngularPid, Pid},
     differential::motion::{BasicMotion, Ramsete, Seeking},
     math::IntoAngle,
-    prelude::{CubicBezier, Trajectory},
+    prelude::*,
 };
 use vexide::prelude::{Motor, sleep};
 
-use super::{ANGULAR_CONTROLLER, CONSTRAINTS, LINEAR_CONTROLLER, TOLERANCES, command::Command};
-use crate::{GEARING, Robot, TRACK_WIDTH, WHEEL_DIAMETER};
+use super::command::Command;
+use crate::{Robot, DRIVE_RPM, GEARING, TRACK_WIDTH, WHEEL_DIAMETER};
+
+const fn from_drive_rpm(rpm: f64, wheel_diameter: f64) -> f64 {
+    (rpm / 60.0) * (core::f64::consts::PI * wheel_diameter)
+}
+
+pub const TOLERANCES: Tolerances = Tolerances::new()
+    .error_tolerance(0.5)
+    .tolerance_duration(Duration::from_millis(250))
+    .timeout(Duration::from_millis(1500))
+    .velocity_tolerance(5.0)
+;
+
+pub const LINEAR_CONTROLLER: Pid = Pid::new(1.25, 0.0, 0.0, None);
+pub const ANGULAR_CONTROLLER: AngularPid =
+    AngularPid::new(30.0, 1.75, 2.0, Some(Angle::from_degrees(25.0)));
+    //AngularPid::new(25.0, 1.75, 2.25, Some(Angle::from_degrees(20.0)));
+
+const CONSTRAINTS: TrajectoryConstraints = TrajectoryConstraints {
+    max_velocity: from_drive_rpm(DRIVE_RPM, WHEEL_DIAMETER),
+    max_acceleration: 200.0,
+    max_deceleration: 200.0,
+    friction_coefficient: 1.0,
+    track_width: TRACK_WIDTH,
+};
 
 pub async fn execute_command(robot: &mut Robot, command: Command) {
     let mut basic = BasicMotion {
@@ -46,9 +71,11 @@ pub async fn execute_command(robot: &mut Robot, command: Command) {
         }
         Command::DriveBy(distance) => {
             _ = basic.drive_distance(dt, distance).await;
+            sleep(Duration::from_millis(250)).await;
         }
         Command::TurnTo(angle) => {
             _ = basic.turn_to_heading(dt, -angle.deg()).await;
+            sleep(Duration::from_millis(250)).await;
         }
         // speed can be controlled using the `velocity_tolerance` constraint in the settler
         Command::Speed(max_speed) => {
@@ -56,15 +83,12 @@ pub async fn execute_command(robot: &mut Robot, command: Command) {
 
             basic.linear_controller.set_output_limit(output_limit);
         }
-        Command::ToggleIntake => {
-            robot.intake.toggle(1.0);
-        }
-        Command::ToggleIntakeReverse => robot.intake.toggle(-1.0),
-        Command::ToggleIntakePiston => {
-            _ = robot.intake_lift.toggle();
+        Command::IntakeCommand(cmd) => {
+            robot.intake.set_command(cmd);
         }
         Command::ToggleClamp => {
-            _ = robot.clamp.toggle();
+            _ = robot.clamp.0.toggle();
+            _ = robot.clamp.1.toggle();
         }
         Command::NextLBStage => {
             robot.lady_brown.next();
@@ -72,6 +96,6 @@ pub async fn execute_command(robot: &mut Robot, command: Command) {
         Command::Sleep(delay) => {
             sleep(Duration::from_millis(delay)).await;
         }
-        _ => unreachable!(),
+        _ => (),
     };
 }

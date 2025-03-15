@@ -1,25 +1,25 @@
 // path 1 (mess up)
 Coordinate (12.0,48.0)
+//Speed 0.6
 Drive 32.0
 Sleep 750
-ToggleIntake
+Intake on
 ToggleClamp
 Sleep 500
 Turn 135.0
-ToggleIntakePiston
-DriveBy -28.0
-ToggleIntake
-ToggleIntakePiston
+
+Drive -28.0
+Intake off
+
 Sleep 1000
-ToggleIntake
+Intake on
 Sleep 1000
 Turn 0.0
 Drive -20.0
 Turn -67.5
 Drive -48.0
-ToggleIntakePiston
+
 Sleep 250
-ToggleIntakePiston
 Sleep 250
 Turn -45.0
 Drive 36.0

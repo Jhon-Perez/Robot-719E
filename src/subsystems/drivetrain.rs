@@ -1,6 +1,6 @@
 use vexide::prelude::{Float, Motor};
 
-use crate::mappings::{ControllerMappings, DriveMode};
+use crate::mappings::DriveMode;
 
 
 /// Applies an acceleration function to the given power value.
@@ -21,14 +21,14 @@ fn get_acceleration(power: f64, acceleration: i32) -> f64 {
 
 /// Computes the left and right motor power values based on the selected drive mode.
 /// Supports both Arcade and Tank drive configurations.
-pub fn differential_drive(mappings: &ControllerMappings) -> (f64, f64) {
+pub fn differential_drive(drive_mode: &DriveMode) -> (f64, f64) {
     let mut power_val = 0.0;
     let mut turn_val = 0.0;
     let mut left_val = 0.0;
     let mut right_val = 0.0;
 
     // Extract joystick values based on the configured drive mode
-    match mappings.drive_mode {
+    match drive_mode {
         DriveMode::Arcade { power, turn } => {
             power_val = power.y(); // Forward/backward movement
             turn_val = turn.x(); // Turning movement
@@ -40,7 +40,7 @@ pub fn differential_drive(mappings: &ControllerMappings) -> (f64, f64) {
     }
 
     // Apply acceleration function if using Arcade drive
-    if !matches!(mappings.drive_mode, DriveMode::Tank { .. }) {
+    if !matches!(drive_mode, DriveMode::Tank { .. }) {
         left_val = get_acceleration(power_val + turn_val, 1);
         right_val = get_acceleration(power_val - turn_val, 1);
     }

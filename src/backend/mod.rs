@@ -37,7 +37,7 @@ pub fn initialize_slint_gui(display: Display, settings: Rc<RefCell<RobotSettings
             let index = autonomous.index as usize;
 
             // Convert the selected autonomous path into commands
-            let commands = match command::path_to_commands(PATHS[index]) {
+            let mut commands = match command::path_to_commands(PATHS[index]) {
                 Ok(commands) => commands,
                 Err(e) => {
                     println!("Error parsing command '{}'", e);
@@ -46,11 +46,9 @@ pub fn initialize_slint_gui(display: Display, settings: Rc<RefCell<RobotSettings
             };
 
             // If the autonomous color is blue, invert the path coordinates
-            let commands = if autonomous.color == Color::Blue {
-                reverse::invert_coords(&commands)
-            } else {
-                commands
-            };
+            if autonomous.color == Color::Blue {
+                commands = reverse::invert_coords(&commands)
+            }
 
             // Convert commands into coordinates for visualization
             let coords = command::command_to_coords(&commands);

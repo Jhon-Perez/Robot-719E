@@ -1,51 +1,58 @@
 import { ComboBox, Button, VerticalBox, HorizontalBox } from "std-widgets.slint";
 
+/// Enum representing the available alliance colors
 export enum Color {
     Red,
     Blue,
 }
 
+/// Struct representing autonomous selection details
 export struct Autonomous {
-    color: Color,
-    index: int,
-    side: string,
+    color: Color,   // Selected alliance color
+    index: int,     // Selected autonomous index
+    side: string,   // Selected autonomous strategy
 }
 
+/// Main application window
 export component AppWindow inherits Window {
     width: 480px;
     height: 240px;
 
+    // Callbacks for handling autonomous selection and testing
     callback autonomous(Autonomous);
     callback test();
 
-    callback request-path();
+    // Property to bind the displayed path image
     in-out property<image> path_image <=> path.source;
-    
+
     HorizontalLayout {
         spacing: 140px;
 
+        // Vertical layout for autonomous selection controls
         VerticalLayout {
             spacing: 10px;
             padding: 10px;
             width: 100px;
 
+            // Row containing mode selection dropdown and color selection button
             HorizontalLayout {
                 spacing: 5px;
                 height: 40px;
 
+                // ComboBox for selecting an autonomous mode
                 mode_cb := ComboBox {
                     width: 160px;
-                    
                     model: [
                         "Select Auton",
                         "Left",
-                        "Left (mess up)",
+                        "Left other path",
                         "Goal Rush",
                         "Right",
                         "Skills",
                     ];
                 }
 
+                // Button to toggle alliance color (Red/Blue)
                 color_cb := Button {
                     width: 60px;
                     checkable: true;
@@ -53,8 +60,9 @@ export component AppWindow inherits Window {
                 }
             }
 
+            // Save button to confirm selection and request path
             Button {
-                text: "save";
+                text: "Save";
                 height: 40px;
                 width: 225px;
                 clicked => {
@@ -63,12 +71,12 @@ export component AppWindow inherits Window {
                         index: mode_cb.current_index,
                         side: mode_cb.current_value,
                     });
-                    root.request-path();
                 }
             }
 
+            // Test button to trigger the autonomous test
             Button {
-                text: "test auton";
+                text: "Test Auton";
                 height: 40px;
                 width: 225px;
                 clicked => {
@@ -77,18 +85,21 @@ export component AppWindow inherits Window {
             }
         }
         
+        // Field view with overlayed autonomous path
         Rectangle {
             width: 240px;
             height: 240px;
             
+            // Background field image
             Image {
-                source: @image-url("../images/TopView.svg");
+                source: @image-url("../images/match_field.svg");
                 width: 100%;
                 height: 100%;
                 horizontal-alignment: center;
                 vertical-alignment: center;
             }
 
+            // Overlay image for the selected path
             path := Image {
                 width: parent.width;
                 height: parent.height;
@@ -96,4 +107,3 @@ export component AppWindow inherits Window {
         }
     }
 }
-

@@ -2,6 +2,8 @@ use alloc::vec::Vec;
 
 use evian::math::Vec2;
 
+use crate::subsystems::intake::IntakeCommand;
+
 use super::command::Command;
 
 /// Parses a `Vec2<f64>` from a string formatted as "(x,y)"
@@ -66,4 +68,19 @@ pub fn pose(args: &[&str]) -> Result<Command, &'static str> {
     let angle = single_f64(&[args[1]])?;
 
     Ok(Command::Pose(position, angle))
+}
+
+pub fn intake_command(args: &[&str]) -> Result<IntakeCommand, &'static str> {
+    if args.len() != 1 {
+        return Err("Expected one float argument");
+    }
+
+    let arg = args[0];
+    if arg == "off" {
+        return Ok(IntakeCommand::Off);
+    } else if arg == "on" {
+        return Ok(IntakeCommand::On);
+    }
+    
+    single_f64(&[arg]).map(IntakeCommand::Voltage)
 }

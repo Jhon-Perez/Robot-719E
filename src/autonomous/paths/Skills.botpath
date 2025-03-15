@@ -1,24 +1,163 @@
 // temp skills route
-Coordinate (20.0,96.0)
-ToggleIntakePiston
-Drive 6.5
-Sleep 650
-ToggleIntake
-ToggleClamp
-Sleep 750
-Turn 180.0
+// Score on alliance stake with ladybrown
+Pose (10.0,72.0) 180
+Intake 4.0
+Sleep 250
+Intake off
+
+// Tune speed
 Speed 0.5
-Drive 28.0
-Sleep 250
+
+// Clamp goal
+Drive -15
 Turn 90.0
-Drive -24.0
-Sleep 250
-Turn 0.0
-Drive -34.0
-Turn -88.0
-Sleep 250
-Drive 20.0
+Drive 15.0
 Sleep 500
 ToggleClamp
 Sleep 500
+
+// Collect next few rings
+Turn -160.0
+Intake on
 Drive -20.0
+
+Turn -135.0
+Drive -33.0
+
+Turn 180.0
+Drive -28
+NextLBStage
+
+// Score with lady brown
+Drive 23.25
+Intake off
+Sleep 250
+NextLBStage
+Turn 90.0
+Intake on
+Drive 14.0
+NextLBStage
+Sleep 750
+
+// Drive to the end of ring line
+Drive -14.0
+NextLBStage
+Turn 0.0
+Drive -55.0
+Turn -127.0
+Drive -15.0
+Turn 155.0
+
+// Drop goal in corner
+Drive 12.0
+Intake off
+ToggleClamp
+Sleep 500
+
+// Collect other goal
+Drive -12.2
+Turn -90.0
+Drive 75.0
+Sleep 500
+ToggleClamp
+Sleep 500
+
+// Collect next few rings
+Turn 169.0
+Intake on
+Drive -22.5
+Turn 130.0
+Drive -30.0
+Turn 180.0
+Drive -27.0
+NextLBStage
+
+// Score with lady brown
+Drive 22.7
+Intake off
+Sleep 250
+NextLBStage
+Turn -90.0
+Intake on
+Drive 14.0
+NextLBStage
+Sleep 750
+
+// Drive to the end of ring line
+Drive -14.0
+NextLBStage
+Turn 0.0
+Drive -54.0
+Turn 127.0
+Drive -14.0
+// Turn -170.0
+Drive 8.0
+
+// Drop goal in corner
+Turn -135.0
+Drive 6.0
+ToggleClamp
+Sleep 500
+
+// Go under ladder and grab both rings
+Speed 1.0
+Drive -75.0
+Intake 4.0
+Drive -32.0
+// NextLBStage
+// Intake on
+// Sleep 500
+// Intake off
+// Sleep 250
+// NextLBStage
+
+// Move over to other goal
+Speed 0.6
+Turn -41.5
+Intake off
+Drive 32.0
+
+Sleep 500
+ToggleClamp
+Sleep 500
+Intake on
+
+// Turn 180.0
+// Drive -12.0
+// NextLBStage
+// Sleep 750
+// NextLBStage
+
+// Grab ring
+// Drive 12.0
+// Intake on
+Turn 45.0
+Drive -28.0
+Turn 143.0
+Drive -40.0
+
+// Grab next 2 rings before then goal
+Turn 5.0
+Drive -12.0
+Turn 90.0
+Drive -12.0
+Turn -5.0
+Drive 12.0
+Intake off
+ToggleClamp
+
+// Set up position to collect last goal
+Drive -35.0
+Turn 66.5
+Drive 80.0
+ToggleClamp
+
+// Place goal in corner and hang
+Turn 80.0
+Drive 38.0
+ToggleClamp
+
+Drive -10.0
+
+// Turn -135.0
+// Drive 65.0

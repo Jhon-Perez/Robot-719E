@@ -3,7 +3,7 @@ use alloc::vec::Vec;
 use evian::math::Vec2;
 
 use super::parse;
-use crate::pose::Pose;
+use crate::{pose::Pose, subsystems::intake::IntakeCommand};
 
 /// Represents different types of movement and action commands
 /// the robot will execute during the autonomous period.
@@ -34,9 +34,7 @@ pub enum Command {
     Sleep(u64),
 
     /// Toggle the intake system
-    ToggleIntake,
-    ToggleIntakeReverse,
-    ToggleIntakePiston,
+    IntakeCommand(IntakeCommand),
 
     /// Move the "Lady Brown" system to the next stage
     NextLBStage,
@@ -57,9 +55,8 @@ impl Command {
             "Pose" => pose(args),
             "Turn" => single_f64(args).map(Command::TurnTo),
             "Sleep" => single_u64(args).map(Command::Sleep),
-            "ToggleIntake" => Ok(Command::ToggleIntake),
-            "ToggleIntakeReverse" => Ok(Command::ToggleIntakeReverse),
-            "ToggleIntakePiston" => Ok(Command::ToggleIntakePiston),
+            "Speed" => single_f64(args).map(Command::Speed),
+            "Intake" => intake_command(args).map(Command::IntakeCommand),
             "NextLBStage" => Ok(Command::NextLBStage),
             "ToggleClamp" => Ok(Command::ToggleClamp),
             _ => Err("Invalid Command"),
@@ -127,8 +124,7 @@ pub fn command_to_coords(path: &[Command]) -> Vec<Command> {
             }
             Command::TurnTo(angle) => {
                 // Set the absolute heading
-                pose.heading = angle;
-                pose.heading %= 360.0;
+                pose.heading = angle % 360.0;
             }
             Command::Pose(coord, angle) => {
                 // Directly set the position and angle

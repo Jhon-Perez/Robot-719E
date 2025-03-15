@@ -1,10 +1,10 @@
 // goal rush
-CubicBezier (20.0,108.0) (43.5,106.5) (66.0,110.0) (70.0,117.0)
+Bezier (20.0,108.0) (43.5,106.5) (66.0,110.0) (70.0,117.0)
 ToggleClamp
-ToggleIntake
+Intake on
 Coordinate (50.0,117.0)
 Sleep 250
-ToggleIntake
+Intake off
 ToggleClamp
 Coordinate (50.0,100.0)
 ToggleClamp
