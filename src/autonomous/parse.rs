@@ -2,7 +2,7 @@ use alloc::vec::Vec;
 
 use evian::math::Vec2;
 
-use crate::subsystems::intake::IntakeCommand;
+use crate::subsystems::{intake::IntakeCommand, lady_brown::LadyBrownCommand};
 
 use super::command::Command;
 
@@ -72,7 +72,7 @@ pub fn pose(args: &[&str]) -> Result<Command, &'static str> {
 
 pub fn intake_command(args: &[&str]) -> Result<IntakeCommand, &'static str> {
     if args.len() != 1 {
-        return Err("Expected one float argument");
+        return Err("Expected one float/toggle argument");
     }
 
     let arg = args[0];
@@ -83,4 +83,19 @@ pub fn intake_command(args: &[&str]) -> Result<IntakeCommand, &'static str> {
     }
     
     single_f64(&[arg]).map(IntakeCommand::Voltage)
+}
+
+pub fn lady_brown_command(args: &[&str]) -> Result<LadyBrownCommand, &'static str> {
+    if args.len() != 1 {
+        return Err("Expected one voltage/next argument");
+    }
+
+    let arg = args[0];
+    if arg == "next" {
+        return Ok(LadyBrownCommand::Next);
+    } else if arg == "back" {
+        todo!();
+    }
+
+    single_f64(&[arg]).map(LadyBrownCommand::Angle)
 }

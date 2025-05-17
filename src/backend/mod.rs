@@ -6,13 +6,14 @@ use core::cell::RefCell;
 
 use canvas::Canvas;
 use vexide::{
-    core::println,
-    graphics::slint::initialize_slint_platform,
+    io::println,
     prelude::{Display, spawn},
 };
+use vexide_slint::initialize_slint_platform;
 
 use crate::{
     RobotSettings,
+    Color,
     autonomous::{PATHS, command},
 };
 
@@ -45,8 +46,13 @@ pub fn initialize_slint_gui(display: Display, settings: Rc<RefCell<RobotSettings
                 }
             };
 
+            let color = match autonomous.color {
+                SlintColor::Red => Color::Red,
+                SlintColor::Blue => Color::Blue,
+            };
+
             // If the autonomous color is blue, invert the path coordinates
-            if autonomous.color == Color::Blue {
+            if matches!(color, Color::Blue) {
                 commands = reverse::invert_coords(&commands)
             }
 
@@ -54,7 +60,7 @@ pub fn initialize_slint_gui(display: Display, settings: Rc<RefCell<RobotSettings
             let coords = command::command_to_coords(&commands);
 
             // Create a canvas and draw the path
-            let mut canvas = Canvas::new(144, 144, autonomous.color);
+            let mut canvas = Canvas::new(144, 144, color);
             canvas.draw_commands(&coords);
 
             // Ensure the UI handler is still valid before updating
@@ -65,7 +71,7 @@ pub fn initialize_slint_gui(display: Display, settings: Rc<RefCell<RobotSettings
             // Update the robot settings with the selected autonomous path and color
             let mut settings = settings.borrow_mut();
             settings.auton_path = commands;
-            settings.curr_color = autonomous.color;
+            settings.curr_color = color;
         }
     });
 

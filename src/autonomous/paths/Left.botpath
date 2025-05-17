@@ -1,7 +1,7 @@
 // path 1
 // Score on allianc
 Pose (12.0,49.0) 0.0
-Speed 0.5
+Speed 0.6
 
 // make arguments for next stage or a custom angle
 // NextLBStage
@@ -11,23 +11,34 @@ Speed 0.5
 // Head towards mobile goal
 // Bezier (12.0,62.0) (20.0,48.0) (30,48.0) (50.0,48.0)
 // Turn -17
-Drive 26
+Drive 22.0
+
+Speed 0.2
+Drive 8.0
 
 Sleep 500
 Intake on
 ToggleClamp
-Sleep 500
+Sleep 250
+
+// Speed 0.8
 
 // Rush middle for rings
-Turn 148.0
-Drive -26.0
+Turn 143.0
+Drive -22.0
 Turn 95.0
-Drive -14.0
+Drive -16.0
 
 // Collect next ring stack
-Turn -20.0
-Drive -16.0
-Intake on
+Turn -30.0
+Drive -18.0
+// Intake on
+
+Sleep 5000
+
+// Speed 1.0
+// Turn -90.0
+// Drive -43.0
 
 // Attempt to collect rings in a corner
 // Turn 20.0

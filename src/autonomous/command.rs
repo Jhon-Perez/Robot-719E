@@ -3,7 +3,8 @@ use alloc::vec::Vec;
 use evian::math::Vec2;
 
 use super::parse;
-use crate::{pose::Pose, subsystems::intake::IntakeCommand};
+use crate::{pose::Pose, subsystems::{intake::IntakeCommand, lady_brown::LadyBrownCommand}};
+
 
 /// Represents different types of movement and action commands
 /// the robot will execute during the autonomous period.
@@ -38,6 +39,7 @@ pub enum Command {
 
     /// Move the "Lady Brown" system to the next stage
     NextLBStage,
+    LadyBrownCommand(LadyBrownCommand),
 
     /// Toggle the mobile goal clamp
     ToggleClamp,
@@ -46,7 +48,7 @@ pub enum Command {
 impl Command {
     pub fn from_str(command: &str, args: &[&str]) -> Result<Self, &'static str> {
         use parse::*;
-        match command {
+        match command.trim() {
             "Coordinate" => single_vec2(args).map(Command::Coordinate),
             "Bezier" => {
                 multiple_vec2(args, 4).map(|v| Command::CubicBezier(v[0], v[1], v[2], v[3]))
@@ -57,6 +59,7 @@ impl Command {
             "Sleep" => single_u64(args).map(Command::Sleep),
             "Speed" => single_f64(args).map(Command::Speed),
             "Intake" => intake_command(args).map(Command::IntakeCommand),
+            "LadyBrown" => lady_brown_command(args).map(Command::LadyBrownCommand),
             "NextLBStage" => Ok(Command::NextLBStage),
             "ToggleClamp" => Ok(Command::ToggleClamp),
             _ => Err("Invalid Command"),

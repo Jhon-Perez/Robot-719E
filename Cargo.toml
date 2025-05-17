@@ -13,13 +13,14 @@ name = "719E Limbo"
 icon = "cool-x"
 compress = true
 
+[features]
+gui = []
+
 [dependencies]
 slint = { version = "1.9.2", default-features = false, features = ["compat-1-2", "unsafe-single-threaded", "libm", "renderer-software"] }
-# vexide = "0.6.1"
-vexide = { version = "0.6.1", features = ["slint"] }
-# evian = "0.3.0-beta.2"
-# evian = { git = "https://github.com/vexide/evian.git" }
-evian = { path = "../evian" }
+vexide = "0.7.0"
+evian = "0.3.0-rc.1"
+vexide-slint = "0.1.0"
 
 [build-dependencies]
 slint-build = "1.9.2"

@@ -1,10 +1,23 @@
 // goal rush
-Bezier (20.0,108.0) (43.5,106.5) (66.0,110.0) (70.0,117.0)
+// Bezier (20.0,108.0) (43.5,106.5) (66.0,110.0) (70.0,117.0)
+// ToggleClamp
+// Intake on
+// Coordinate (50.0,117.0)
+// Sleep 250
+// Intake off
+// ToggleClamp
+// Coordinate (50.0,100.0)
+// ToggleClamp
+
+Coordinate (20.0,132.0)
+
+Drive 35.0
+Turn -42.5
+Drive 17.5
+Sleep 750
 ToggleClamp
 Intake on
-Coordinate (50.0,117.0)
-Sleep 250
-Intake off
-ToggleClamp
-Coordinate (50.0,100.0)
-ToggleClamp
+Sleep 500
+Turn -9.0
+Drive -18.0
+Sleep 500

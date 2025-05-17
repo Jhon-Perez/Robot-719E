@@ -19,14 +19,14 @@ pub struct ControllerMappings {
 
     pub intake: ButtonState,
     pub outake: ButtonState,
-    pub intake_lift: ButtonState,
+    pub doinker: ButtonState,
     pub toggle_color_sort: ButtonState,
 
     pub lady_brown: ButtonState,
+    pub manual_lady_brown: JoystickState,
 
     pub test_angular: ButtonState,
     pub test_linear: ButtonState,
-    pub test_alliance: ButtonState,
 
     pub clamp: ButtonState,
 }

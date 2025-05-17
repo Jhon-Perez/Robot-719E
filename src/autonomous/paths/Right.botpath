@@ -1,15 +1,29 @@
 // path 2
-Coordinate (24.0,132.0)
+Coordinate (18.0,94.0)
 
-Drive 35.0
-Turn -42.5
-Drive 17.5
-Sleep 750
-ToggleClamp
+// Drive 20
+// Speed 0.6
+// Drive 5
+
+Speed 0.5
+Drive 27.0
+
+Speed 0.8
 Intake on
+ToggleClamp
 Sleep 500
-Turn -9.0
-Drive -18.0
-Sleep 500
-//Turn -135.0
-//Drive -24.0
+
+Turn 100
+
+Turn -98
+Drive -28
+
+// Sleep 5000
+Turn 100
+Drive -35
+
+// Speed 0.8
+// Turn 64
+// Drive -45
+// Sleep 300
+// Drive -15

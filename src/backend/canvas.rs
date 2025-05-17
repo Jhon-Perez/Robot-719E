@@ -4,7 +4,7 @@ use evian::math::Vec2;
 use slint::{Image, SharedPixelBuffer};
 use vexide::prelude::Float;
 
-use crate::{autonomous::command::Command, backend::Color};
+use crate::{autonomous::command::Command, Color};
 
 // Drawing platform for different lines and curves for the autonomous selector
 pub struct Canvas {

@@ -3,13 +3,15 @@ use core::{cell::RefCell, iter::Cycle, ops::Range, time::Duration};
 use alloc::rc::Rc;
 use vexide::prelude::{sleep, spawn, BrakeMode, Motor, RotationSensor, Task};
 
-//pub enum LadyBrownCommand {
-//    Next,
-//    Voltage(f64),
-//}
+#[derive(Clone, Copy, Debug)]
+pub enum LadyBrownCommand {
+    Next,
+    Angle(f64),
+    Voltage(f64),
+}
 
 pub struct LadyBrown {
-    //command: Rc<RefCell<LadyBrownCommand>>,
+    command: Rc<RefCell<LadyBrownCommand>>,
     stage: Rc<RefCell<usize>>,
     stages: Cycle<Range<usize>>,
     _task: Task<()>,
@@ -18,12 +20,14 @@ pub struct LadyBrown {
 impl LadyBrown {
     /// Predefined angles for different stages of the scoring mechanism
     const ANGLES: [f64; 4] = [
-        62.0, // Flick tolerance (default resting position)
-        11.0, // Intake (aligns with hooks to pick up rings)
-        110.0, // Align (positioning before scoring)
-        150.0,
-        //180.0, // Scoring (final scoring position on wall stake)
+        80.0, // Flick tolerance (default resting position)
+        8.0, // Intake (aligns with hooks to pick up rings)
+        100.0, // Align (positioning before scoring)
+        150.0, // Scoring (final scoring position on wall stake)
     ];
+
+    // the starting angle the rotation sensor reports
+    // const STARTING_ANGLE: f64 = 0.0;
 
     /// Initializes the scoring mechanism with motors and optional sensors
     pub fn new<const COUNT: usize>(
@@ -31,14 +35,14 @@ impl LadyBrown {
         mut rotation_sensor: RotationSensor,
         gear_ratio: Option<f64>,
     ) -> Self {
-        //let command = Rc::new(RefCell::new(LadyBrownCommand::Voltage(0.0)));
+        let command = Rc::new(RefCell::new(LadyBrownCommand::Angle(0.0)));
         let stage = Rc::new(RefCell::new(0));
         let mut stages = (0..Self::ANGLES.len()).cycle();
         _ = stages.next();
         _ = rotation_sensor.reset_position();
 
         Self {
-            //command: command.clone(),
+            command: command.clone(),
             stage: stage.clone(),
             stages, // Infinite cycle through the stages
             _task: spawn(async move {
@@ -57,12 +61,18 @@ impl LadyBrown {
 
                     // Adjust motor behavior based on the current stage
                     //println!("{}", *stage.borrow());
+                    // if matches!(*command.borrow(), LadyBrownCommand::Angle(_)) {
+                    //     for motor in motors.iter_mut() {
+                    //         // _ = motor.set_voltage
+                    //         todo!()
+                    //     }
+                    // }
                     match *stage.borrow() {
                         0 => {
                             // Stage 0: Let the lady brown fall down to a resting position
                             if angle > Self::ANGLES[*stage.borrow()] {
                                 for motor in motors.iter_mut() {
-                                    _ = motor.set_voltage(-motor.max_voltage());
+                                    _ = motor.set_voltage(-motor.max_voltage() * 0.8);
                                 }
                             } else {
                                 for motor in motors.iter_mut() {
@@ -74,7 +84,7 @@ impl LadyBrown {
                             // Stages 1-3: Move up until motors have reached the desired angle
                             if angle < Self::ANGLES[*stage.borrow()] {
                                 for motor in motors.iter_mut() {
-                                    _ = motor.set_voltage(motor.max_voltage());
+                                    _ = motor.set_voltage(motor.max_voltage() * 0.6);
                                 }
                             } else {
                                 for motor in motors.iter_mut() {
@@ -90,6 +100,12 @@ impl LadyBrown {
         }
     }
 
+    pub fn set_command(&mut self, cmd: LadyBrownCommand) {
+        if let Ok(mut command) = self.command.try_borrow_mut() {
+            *command = cmd;
+        }
+    }
+
     /// Advances to the next stage in the cycle
     pub fn next(&mut self) {
         let mut stage = self.stage.borrow_mut();
@@ -101,9 +117,9 @@ fn get_angle(rotation_sensor: &RotationSensor, motors: &[Motor], gear_ratio: Opt
     // Try to get the angle from the rotation sensor first
     
     if let Ok(angle) = rotation_sensor.position() {
-        return Some(angle.as_degrees());
+        return Some(angle.as_degrees() * gear_ratio.unwrap_or(1.0));
     }
 
     // If the sensor is unavailable or failed, try the first motor
-    Some(motors.first()?.position().ok()?.as_degrees() * gear_ratio?)
+    Some(motors.first()?.position().ok()?.as_degrees() * gear_ratio.unwrap_or(1.0))
 }

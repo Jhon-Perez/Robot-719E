@@ -1,12 +1,9 @@
 use alloc::rc::Rc;
 use core::{cell::RefCell, time::Duration};
 
-use vexide::{
-    devices::smart::motor::MotorError,
-    prelude::{BrakeMode, Motor, OpticalSensor, Task, sleep, spawn},
-};
+use vexide::{io::println, prelude::{sleep, spawn, BrakeMode, Motor, OpticalSensor, Task}};
 
-use crate::{RobotSettings, backend::Color};
+use crate::{RobotSettings, Color};
 
 #[derive(Copy, Clone, Debug)]
 pub enum IntakeCommand {
@@ -52,39 +49,17 @@ impl Intake {
                 let sorting_revolutions = sorting_distance / sprocket_teeth;
 
                 loop {
+                    println!("{:?}", *command.borrow());
                     match *command.borrow() {
                         IntakeCommand::Voltage(voltage) => {
                             for motor in motors.iter_mut() {
                                 _ = motor.set_voltage(voltage);
                             }
-
-                            //if let Ok(resistance) = motor_get_resistance(&motors[0]) {
-                                //if resistance == 0.0 {
-                                //    for motor in motors.iter_mut() {
-                                //        _ = motor.set_voltage(-motor.max_voltage());
-                                //        sleep(Duration::from_millis(250)).await;
-                                //    }
-                                //}
-                            //}
                         }
                         IntakeCommand::On => {
                             for motor in motors.iter_mut() {
                                 _ = motor.set_voltage(motor.max_voltage());
                             }
-
-                            // motor is jammed
-                            //if let Ok(resistance) = motor_get_resistance(&motors[0]) {
-                            //    println!("V: {}", motors[0].voltage().unwrap_or_default());
-                            //    println!("I: {}", motors[0].current().unwrap_or_default());
-                            //    println!("R: {}", resistance);
-                            //
-                            //    if resistance == 0.0 {
-                            //        for motor in motors.iter_mut() {
-                            //            _ = motor.set_voltage(-motor.max_voltage());
-                            //            sleep(Duration::from_millis(250)).await;
-                            //        }
-                            //    }
-                            //}
 
                             if *color_sort.borrow() {
                                 // Blue ring has a hue of 120 to 240 and red ring has a hue of 0 to 60
@@ -142,14 +117,3 @@ impl Intake {
         *color_sort = !*color_sort;
     }
 }
-
-//fn set_motors(motors: &mut [Motor], voltage: f64) {
-//    for motor in motors.iter_mut() {
-//        _ = motor.set_voltage(voltage);
-//    }
-//}
-
-// Use Ohm's Law (Resistance = Voltage / Current)
-//fn motor_get_resistance(motor: &Motor) -> Result<f64, MotorError> {
-//    Ok(motor.velocity()? / motor.current()?)
-//}

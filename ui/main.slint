@@ -1,14 +1,14 @@
 import { ComboBox, Button, VerticalBox, HorizontalBox } from "std-widgets.slint";
 
 /// Enum representing the available alliance colors
-export enum Color {
+export enum SlintColor {
     Red,
     Blue,
 }
 
 /// Struct representing autonomous selection details
 export struct Autonomous {
-    color: Color,   // Selected alliance color
+    color: SlintColor,   // Selected alliance color
     index: int,     // Selected autonomous index
     side: string,   // Selected autonomous strategy
 }
@@ -67,7 +67,7 @@ export component AppWindow inherits Window {
                 width: 225px;
                 clicked => {
                     root.autonomous({
-                        color: color_cb.text == @tr("red") ? Color.Red : Color.Blue,
+                        color: color_cb.text == @tr("red") ? SlintColor.Red : SlintColor.Blue,
                         index: mode_cb.current_index,
                         side: mode_cb.current_value,
                     });

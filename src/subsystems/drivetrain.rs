@@ -2,7 +2,6 @@ use vexide::prelude::{Float, Motor};
 
 use crate::mappings::DriveMode;
 
-
 /// Applies an acceleration function to the given power value.
 /// Uses polynomial scaling based on the acceleration factor.
 fn get_acceleration(power: f64, acceleration: i32) -> f64 {
@@ -51,4 +50,3 @@ pub fn differential_drive(drive_mode: &DriveMode) -> (f64, f64) {
         right_val * Motor::V5_MAX_VOLTAGE,
     )
 }
-
